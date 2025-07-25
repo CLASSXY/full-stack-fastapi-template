@@ -1,0 +1,17 @@
+name = "frontend"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "dist"
+
+[env.production]
+name = "frontend-production"
+
+[env.staging]
+name = "frontend-staging"
+
+[[env.production.route]]
+pattern = "full-stack-fastapi-template-7q0.pages.dev/*"
+zone_name = "full-stack-fastapi-template-7q0.pages.dev"
+
+[[env.staging.route]]
+pattern = "staging.full-stack-fastapi-template-7q0.pages.dev/*"
+zone_name = "full-stack-fastapi-template-7q0.pages.dev" 
