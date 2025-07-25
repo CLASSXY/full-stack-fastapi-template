@@ -6,3 +6,4 @@ node_modules/
 /playwright/.cache/
 .codebuddy
 .cursor
+.DS_Store
