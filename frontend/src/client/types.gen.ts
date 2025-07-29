@@ -9,6 +9,15 @@ export type Body_login_login_access_token = {
   client_secret?: string | null
 }
 
+export type Body_ocr_process_ocr = {
+  device_sn: string
+  image_file: Blob | File
+  language?: string
+  use_angle_cls?: boolean
+  use_dilation?: boolean
+  confidence_thresh?: number
+}
+
 export type HTTPValidationError = {
   detail?: Array<ValidationError>
 }
@@ -42,6 +51,34 @@ export type Message = {
 export type NewPassword = {
   token: string
   new_password: string
+}
+
+export type OCRRecordPublic = {
+  device_sn: string
+  original_image_url: string
+  result_image_url?: string | null
+  ocr_text?: string | null
+  ocr_confidence?: number | null
+  language?: string
+  processing_time?: number | null
+  status?: string
+  error_message?: string | null
+  file_size?: number | null
+  image_format?: string | null
+  use_angle_cls?: boolean
+  id: string
+  detection_boxes?: {
+    [key: string]: unknown
+  } | null
+  scan_time: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export type OCRRecordsPublic = {
+  data: Array<OCRRecordPublic>
+  count: number
 }
 
 export type PrivateUserCreate = {
@@ -164,6 +201,42 @@ export type LoginRecoverPasswordHtmlContentData = {
 }
 
 export type LoginRecoverPasswordHtmlContentResponse = string
+
+export type OcrProcessOcrData = {
+  formData: Body_ocr_process_ocr
+}
+
+export type OcrProcessOcrResponse = OCRRecordPublic
+
+export type OcrGetOcrResultsData = {
+  deviceSn?: string | null
+  limit?: number
+  skip?: number
+}
+
+export type OcrGetOcrResultsResponse = OCRRecordsPublic
+
+export type OcrGetOcrResultData = {
+  recordId: string
+}
+
+export type OcrGetOcrResultResponse = OCRRecordPublic
+
+export type OcrDeleteOcrResultData = {
+  recordId: string
+}
+
+export type OcrDeleteOcrResultResponse = {
+  [key: string]: unknown
+}
+
+export type OcrDownloadOcrTextData = {
+  recordId: string
+}
+
+export type OcrDownloadOcrTextResponse = {
+  [key: string]: unknown
+}
 
 export type PrivateCreateUserData = {
   requestBody: PrivateUserCreate

@@ -1,7 +1,9 @@
 import uuid
+from datetime import datetime
+from typing import Any
 
 from pydantic import EmailStr
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel, JSON, Column
 
 
 # Shared properties
@@ -44,6 +46,7 @@ class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
     items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
+    ocr_records: list["OCRRecord"] = Relationship(back_populates="creator", cascade_delete=True)
 
 
 # Properties to return via API, id is always required
@@ -90,6 +93,79 @@ class ItemPublic(ItemBase):
 class ItemsPublic(SQLModel):
     data: list[ItemPublic]
     count: int
+
+
+# Shared properties for OCR records
+class OCRRecordBase(SQLModel):
+    device_sn: str = Field(max_length=255, index=True)
+    original_image_url: str = Field(max_length=500)
+    result_image_url: str | None = Field(default=None, max_length=500)
+    ocr_text: str | None = Field(default=None)
+    ocr_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    language: str = Field(default="ch", max_length=20)
+    processing_time: float | None = Field(default=None)
+    status: str = Field(default="processing", max_length=50)
+    error_message: str | None = Field(default=None)
+    file_size: int | None = Field(default=None)
+    image_format: str | None = Field(default=None, max_length=20)
+    use_angle_cls: bool = Field(default=False)
+
+
+# Properties to receive on OCR record creation
+class OCRRecordCreate(SQLModel):
+    device_sn: str = Field(max_length=255)
+    language: str = Field(default="ch", max_length=20)
+    use_angle_cls: bool = Field(default=False)
+    use_dilation: bool = Field(default=False)
+    confidence_thresh: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+# Properties to receive on OCR record update
+class OCRRecordUpdate(SQLModel):
+    ocr_text: str | None = Field(default=None)
+    ocr_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    result_image_url: str | None = Field(default=None, max_length=500)
+    processing_time: float | None = Field(default=None)
+    status: str | None = Field(default=None, max_length=50)
+    error_message: str | None = Field(default=None)
+    detection_boxes: dict[str, Any] | None = Field(default=None)
+
+
+# Database model for OCR records
+class OCRRecord(OCRRecordBase, table=True):
+    __tablename__ = "ocr_records"
+    
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    detection_boxes: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    scan_time: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_by: uuid.UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    # Relationships
+    creator: User | None = Relationship(back_populates="ocr_records")
+
+
+# Properties to return via API
+class OCRRecordPublic(OCRRecordBase):
+    id: uuid.UUID
+    detection_boxes: dict[str, Any] | None = None
+    scan_time: datetime
+    created_by: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class OCRRecordsPublic(SQLModel):
+    data: list[OCRRecordPublic]
+    count: int
+
+
+# Detection box model for structured data
+class DetectionBox(SQLModel):
+    text: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    box: list[list[float]]  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
 
 
 # Generic message

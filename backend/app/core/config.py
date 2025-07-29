@@ -35,12 +35,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str = secrets.token_urlsafe(32)
     # 60 minutes * 24 hours * 8 days = 8 days
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8
-    FRONTEND_HOST: str = "http://localhost:5173"
+    FRONTEND_HOST: str = "http://localhost:5173"  # Updated back to default port
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 
     BACKEND_CORS_ORIGINS: Annotated[
         list[AnyUrl] | str, BeforeValidator(parse_cors)
-    ] = []
+    ] = ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"]  # Common dev ports
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -94,6 +94,30 @@ class Settings(BaseSettings):
     EMAIL_TEST_USER: EmailStr = "test@example.com"
     FIRST_SUPERUSER: EmailStr
     FIRST_SUPERUSER_PASSWORD: str
+
+    # OCR Configuration
+    PADDLEOCR_USE_GPU: bool = False
+    PADDLEOCR_DEFAULT_LANG: str = "ch"
+    PADDLEOCR_MODEL_DIR: str = "/app/paddleocr_models/"
+    PADDLEOCR_USE_ANGLE_CLS: bool = False
+    PADDLEOCR_MAX_WORKERS: int = 2
+    
+    # File processing Configuration
+    OCR_UPLOAD_PATH: str = "/app/uploads/ocr/"
+    OCR_MAX_FILE_SIZE: int = 10485760  # 10MB
+    OCR_ALLOWED_FORMATS: str = "jpg,jpeg,png,bmp"
+    
+    # Cloudflare R2 Storage Configuration
+    CLOUDFLARE_R2_ENDPOINT_URL: str | None = None
+    CLOUDFLARE_R2_ACCESS_KEY_ID: str | None = None
+    CLOUDFLARE_R2_SECRET_ACCESS_KEY: str | None = None
+    CLOUDFLARE_R2_BUCKET_NAME: str | None = None
+    CLOUDFLARE_R2_PUBLIC_URL: str | None = None  # Optional: custom domain
+    
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def ocr_allowed_formats_list(self) -> list[str]:
+        return [fmt.strip().lower() for fmt in self.OCR_ALLOWED_FORMATS.split(",")]
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":

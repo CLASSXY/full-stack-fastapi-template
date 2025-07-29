@@ -4,6 +4,31 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app/
 
+# Install system dependencies for PaddleOCR
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libgthread-2.0-0 \
+    libfontconfig1 \
+    libxinerama1 \
+    libxrandr2 \
+    libxss1 \
+    libxtst6 \
+    libasound2 \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directories for PaddleOCR models and uploads
+RUN mkdir -p /app/paddleocr_models /app/uploads/ocr
+
+# Set PaddleOCR environment variables
+ENV HUB_HOME=/app/paddleocr_models
+ENV PADDLEHUB_HOME=/app/paddleocr_models
+
 # Install uv
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/

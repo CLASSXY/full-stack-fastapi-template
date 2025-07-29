@@ -5,6 +5,10 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
+from app.core.logging_config import setup_logging, app_logger
+
+# Setup logging before anything else
+setup_logging()
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -19,6 +23,8 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     generate_unique_id_function=custom_generate_unique_id,
 )
+
+app_logger.info(f"🚀 Starting {settings.PROJECT_NAME} - Environment: {settings.ENVIRONMENT}")
 
 # Set all CORS enabled origins
 if settings.all_cors_origins:

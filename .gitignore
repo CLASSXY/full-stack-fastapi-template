@@ -7,3 +7,4 @@ node_modules/
 .codebuddy
 .cursor
 .DS_Store
+backend/logs/

@@ -23,6 +23,16 @@ import type {
   LoginResetPasswordResponse,
   LoginRecoverPasswordHtmlContentData,
   LoginRecoverPasswordHtmlContentResponse,
+  OcrProcessOcrData,
+  OcrProcessOcrResponse,
+  OcrGetOcrResultsData,
+  OcrGetOcrResultsResponse,
+  OcrGetOcrResultData,
+  OcrGetOcrResultResponse,
+  OcrDeleteOcrResultData,
+  OcrDeleteOcrResultResponse,
+  OcrDownloadOcrTextData,
+  OcrDownloadOcrTextResponse,
   PrivateCreateUserData,
   PrivateCreateUserResponse,
   UsersReadUsersData,
@@ -266,6 +276,163 @@ export class LoginService {
       url: "/api/v1/password-recovery-html-content/{email}",
       path: {
         email: data.email,
+      },
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+}
+
+export class OcrService {
+  /**
+   * Process Ocr
+   * Process OCR on uploaded image file.
+   *
+   * Args:
+   * device_sn: Device serial number
+   * image_file: Image file to process
+   * language: OCR language (default: 'ch')
+   * use_angle_cls: Whether to use document orientation classification
+   * use_dilation: Whether to use dilation processing
+   * confidence_thresh: Text recognition confidence threshold (0-1)
+   *
+   * Returns:
+   * OCR processing result
+   * @param data The data for the request.
+   * @param data.formData
+   * @returns OCRRecordPublic Successful Response
+   * @throws ApiError
+   */
+  public static processOcr(
+    data: OcrProcessOcrData,
+  ): CancelablePromise<OcrProcessOcrResponse> {
+    return __request(OpenAPI, {
+      method: "POST",
+      url: "/api/v1/ocr/process",
+      formData: data.formData,
+      mediaType: "multipart/form-data",
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+
+  /**
+   * Get Ocr Results
+   * Get OCR results with pagination and optional filtering.
+   *
+   * Args:
+   * skip: Number of records to skip
+   * limit: Maximum number of records to return
+   * device_sn: Optional device SN filter
+   *
+   * Returns:
+   * Paginated OCR results
+   * @param data The data for the request.
+   * @param data.skip
+   * @param data.limit
+   * @param data.deviceSn
+   * @returns OCRRecordsPublic Successful Response
+   * @throws ApiError
+   */
+  public static getOcrResults(
+    data: OcrGetOcrResultsData = {},
+  ): CancelablePromise<OcrGetOcrResultsResponse> {
+    return __request(OpenAPI, {
+      method: "GET",
+      url: "/api/v1/ocr/results",
+      query: {
+        skip: data.skip,
+        limit: data.limit,
+        device_sn: data.deviceSn,
+      },
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+
+  /**
+   * Get Ocr Result
+   * Get specific OCR result by ID.
+   *
+   * Args:
+   * record_id: OCR record UUID
+   *
+   * Returns:
+   * OCR record details
+   * @param data The data for the request.
+   * @param data.recordId
+   * @returns OCRRecordPublic Successful Response
+   * @throws ApiError
+   */
+  public static getOcrResult(
+    data: OcrGetOcrResultData,
+  ): CancelablePromise<OcrGetOcrResultResponse> {
+    return __request(OpenAPI, {
+      method: "GET",
+      url: "/api/v1/ocr/results/{record_id}",
+      path: {
+        record_id: data.recordId,
+      },
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+
+  /**
+   * Delete Ocr Result
+   * Delete specific OCR result by ID.
+   *
+   * Args:
+   * record_id: OCR record UUID
+   *
+   * Returns:
+   * Success message
+   * @param data The data for the request.
+   * @param data.recordId
+   * @returns unknown Successful Response
+   * @throws ApiError
+   */
+  public static deleteOcrResult(
+    data: OcrDeleteOcrResultData,
+  ): CancelablePromise<OcrDeleteOcrResultResponse> {
+    return __request(OpenAPI, {
+      method: "DELETE",
+      url: "/api/v1/ocr/results/{record_id}",
+      path: {
+        record_id: data.recordId,
+      },
+      errors: {
+        422: "Validation Error",
+      },
+    })
+  }
+
+  /**
+   * Download Ocr Text
+   * Download OCR result as text file.
+   *
+   * Args:
+   * record_id: OCR record UUID
+   *
+   * Returns:
+   * Download information
+   * @param data The data for the request.
+   * @param data.recordId
+   * @returns unknown Successful Response
+   * @throws ApiError
+   */
+  public static downloadOcrText(
+    data: OcrDownloadOcrTextData,
+  ): CancelablePromise<OcrDownloadOcrTextResponse> {
+    return __request(OpenAPI, {
+      method: "GET",
+      url: "/api/v1/ocr/download/{record_id}",
+      path: {
+        record_id: data.recordId,
       },
       errors: {
         422: "Validation Error",

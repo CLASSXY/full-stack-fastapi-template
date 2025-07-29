@@ -17,10 +17,24 @@ dependencies = [
     "psycopg[binary]<4.0.0,>=3.1.13",
     "sqlmodel<1.0.0,>=0.0.21",
     # Pin bcrypt until passlib supports the latest
-    "bcrypt==4.3.0",
+    # bcrypt 4.0+ removes __about__ module, causing AttributeError with passlib 1.7.4
+    # Using 3.2.2 which is the last version with full compatibility
+    "bcrypt==3.2.2",
     "pydantic-settings<3.0.0,>=2.2.1",
     "sentry-sdk[fastapi]<2.0.0,>=1.40.6",
     "pyjwt<3.0.0,>=2.8.0",
+    # OCR dependencies  
+    "paddlepaddle-gpu>=2.5.0; sys_platform != 'darwin'",
+    "paddlepaddle>=2.5.0; sys_platform == 'darwin'", 
+    "paddleocr>=2.7.0",
+    "setuptools>=68.0.0",
+    "Pillow>=10.0.0",
+    "opencv-python>=4.8.0",
+    "numpy>=1.21.0",
+    "aiofiles>=23.0.0",
+    # R2 Storage dependencies
+    "boto3>=1.26.0",
+    "botocore>=1.29.0",
 ]
 
 [tool.uv]
