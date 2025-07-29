@@ -9,7 +9,7 @@ import type { UserPublic } from "@/client"
 const items = [
   { icon: FiHome, title: "Dashboard", path: "/" },
   { icon: FiBriefcase, title: "Items", path: "/items" },
-  { icon: FiCamera, title: "OCR Results", path: "/ocr-results" },
+  { icon: FiCamera, title: "运单管理", path: "/waybills" },
   { icon: FiSettings, title: "User Settings", path: "/settings" },
 ]
 

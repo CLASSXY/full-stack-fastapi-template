@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Body
 from sqlmodel import Session, select
 
 from app.api.deps import CurrentUser, get_db
@@ -192,25 +192,118 @@ def get_ocr_results(
     skip: int = 0,
     limit: int = 100,
     device_sn: str | None = None,
+    waybill_number: str | None = None,
+    carrier: str | None = None,
+    recipient: str | None = None,
+    audit_status: str | None = None,
+    upload_date_start: str | None = None,
+    upload_date_end: str | None = None,
+    shipping_date_start: str | None = None,
+    shipping_date_end: str | None = None,
+    delivery_date_start: str | None = None,
+    delivery_date_end: str | None = None,
 ) -> OCRRecordsPublic:
     """
-    Get OCR results with pagination and optional filtering.
+    Get OCR results with pagination and filtering.
     
     Args:
         skip: Number of records to skip
         limit: Maximum number of records to return
         device_sn: Optional device SN filter
+        waybill_number: Optional waybill number filter
+        carrier: Optional carrier filter
+        recipient: Optional recipient filter
+        audit_status: Optional audit status filter
+        upload_date_start: Optional upload date start filter (YYYY-MM-DD)
+        upload_date_end: Optional upload date end filter (YYYY-MM-DD)
+        shipping_date_start: Optional shipping date start filter (YYYY-MM-DD)
+        shipping_date_end: Optional shipping date end filter (YYYY-MM-DD)
+        delivery_date_start: Optional delivery date start filter (YYYY-MM-DD)  
+        delivery_date_end: Optional delivery date end filter (YYYY-MM-DD)
     
     Returns:
         Paginated OCR results
     """
     try:
-        # Build query
+        # Build base query
         query = select(OCRRecord).where(OCRRecord.created_by == current_user.id)
         
         # Add device_sn filter if provided (case-insensitive partial match)
         if device_sn:
             query = query.where(OCRRecord.device_sn.ilike(f"%{device_sn}%"))
+        
+        # Add waybill_number filter if provided (case-insensitive partial match)
+        if waybill_number:
+            query = query.where(OCRRecord.waybill_number.ilike(f"%{waybill_number}%"))
+        
+        # Add carrier filter if provided (case-insensitive partial match)
+        if carrier:
+            query = query.where(OCRRecord.carrier.ilike(f"%{carrier}%"))
+        
+        # Add recipient filter if provided (case-insensitive partial match)  
+        if recipient:
+            query = query.where(OCRRecord.recipient.ilike(f"%{recipient}%"))
+        
+        # Add audit status filter if provided (exact match, ignore "全部")
+        if audit_status and audit_status != "全部":
+            query = query.where(OCRRecord.audit_status == audit_status)
+        
+        # Add date range filters
+        if upload_date_start:
+            try:
+                from datetime import datetime
+                start_date = datetime.strptime(upload_date_start, "%Y-%m-%d").date()
+                query = query.where(OCRRecord.upload_date >= start_date)
+            except ValueError:
+                pass  # Invalid date format, ignore filter
+        
+        if upload_date_end:
+            try:
+                from datetime import datetime
+                end_date = datetime.strptime(upload_date_end, "%Y-%m-%d").date()
+                # Add one day to include the entire end date
+                end_date = datetime.combine(end_date, datetime.max.time())
+                query = query.where(OCRRecord.upload_date <= end_date)
+            except ValueError:
+                pass  # Invalid date format, ignore filter
+        
+        if shipping_date_start:
+            try:
+                from datetime import datetime
+                start_date = datetime.strptime(shipping_date_start, "%Y-%m-%d").date()
+                query = query.where(OCRRecord.shipping_date >= start_date)
+            except ValueError:
+                pass
+        
+        if shipping_date_end:
+            try:
+                from datetime import datetime
+                end_date = datetime.strptime(shipping_date_end, "%Y-%m-%d").date()
+                end_date = datetime.combine(end_date, datetime.max.time())
+                query = query.where(OCRRecord.shipping_date <= end_date)
+            except ValueError:
+                pass
+        
+        if delivery_date_start:
+            try:
+                from datetime import datetime
+                start_date = datetime.strptime(delivery_date_start, "%Y-%m-%d").date()
+                query = query.where(OCRRecord.delivery_date >= start_date)
+            except ValueError:
+                pass
+        
+        if delivery_date_end:
+            try:
+                from datetime import datetime
+                end_date = datetime.strptime(delivery_date_end, "%Y-%m-%d").date()
+                end_date = datetime.combine(end_date, datetime.max.time())
+                query = query.where(OCRRecord.delivery_date <= end_date)
+            except ValueError:
+                pass
+        
+        # Get total count for pagination (before applying limit/offset)
+        count_query = query
+        total_count = len(db.exec(count_query).all())
         
         # Add ordering and pagination
         query = query.order_by(OCRRecord.scan_time.desc()).offset(skip).limit(limit)
@@ -218,13 +311,7 @@ def get_ocr_results(
         # Execute query
         ocr_records = db.exec(query).all()
         
-        # Count total records for pagination
-        count_query = select(OCRRecord).where(OCRRecord.created_by == current_user.id)
-        if device_sn:
-            count_query = count_query.where(OCRRecord.device_sn.ilike(f"%{device_sn}%"))
-        
-        # Get count
-        total_count = len(db.exec(count_query).all())
+        logger.info(f"Found {len(ocr_records)} OCR records (total: {total_count}) for user {current_user.id}")
         
         return OCRRecordsPublic(data=ocr_records, count=total_count)
         
@@ -276,6 +363,239 @@ def get_ocr_result(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve OCR result"
+        )
+
+
+@router.put("/results/{record_id}", response_model=OCRRecordPublic)
+def update_ocr_result(
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser,
+    record_id: uuid.UUID,
+    record_update: OCRRecordUpdate,
+) -> OCRRecord:
+    """
+    Update specific OCR result by ID.
+    
+    Args:
+        record_id: OCR record UUID
+        record_update: Updated record data
+    
+    Returns:
+        Updated OCR record
+    """
+    try:
+        # Query for the specific record
+        query = select(OCRRecord).where(
+            OCRRecord.id == record_id,
+            OCRRecord.created_by == current_user.id
+        )
+        
+        ocr_record = db.exec(query).first()
+        
+        if not ocr_record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="OCR record not found"
+            )
+        
+        # Update fields from the request
+        update_data = record_update.model_dump(exclude_unset=True)
+        
+        for field, value in update_data.items():
+            if hasattr(ocr_record, field):
+                setattr(ocr_record, field, value)
+        
+        # Update timestamp
+        ocr_record.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(ocr_record)
+        
+        logger.info(f"Updated OCR record {record_id}")
+        return ocr_record
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update OCR result {record_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update OCR result"
+        )
+
+
+@router.put("/results/{record_id}/waybill")
+def update_waybill_info(
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser,
+    record_id: uuid.UUID,
+    waybill_data: dict = Body(...),
+) -> OCRRecordPublic:
+    """
+    Update waybill information for specific OCR record.
+    
+    Args:
+        record_id: OCR record UUID
+        waybill_number: Waybill number
+        carrier: Carrier/logistics company
+        shipping_date: Shipping date (YYYY-MM-DD)
+        recipient: Recipient name
+        delivery_date: Delivery date (YYYY-MM-DD) 
+        upload_date: Upload date (YYYY-MM-DD)
+        uploader: Uploader name
+    
+    Returns:
+        Updated OCR record
+    """
+    try:
+        # Query for the specific record
+        query = select(OCRRecord).where(
+            OCRRecord.id == record_id,
+            OCRRecord.created_by == current_user.id
+        )
+        
+        ocr_record = db.exec(query).first()
+        
+        if not ocr_record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="OCR record not found"
+            )
+        
+        # Update waybill fields
+        waybill_number = waybill_data.get('waybill_number')
+        if waybill_number is not None:
+            ocr_record.waybill_number = waybill_number
+        
+        carrier = waybill_data.get('carrier')
+        if carrier is not None:
+            ocr_record.carrier = carrier
+        
+        shipping_date = waybill_data.get('shipping_date')
+        if shipping_date is not None:
+            try:
+                ocr_record.shipping_date = datetime.strptime(shipping_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid shipping date format. Use YYYY-MM-DD"
+                )
+        
+        recipient = waybill_data.get('recipient')
+        if recipient is not None:
+            ocr_record.recipient = recipient
+        
+        delivery_date = waybill_data.get('delivery_date')
+        if delivery_date is not None:
+            try:
+                ocr_record.delivery_date = datetime.strptime(delivery_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid delivery date format. Use YYYY-MM-DD"
+                )
+        
+        upload_date = waybill_data.get('upload_date')
+        if upload_date is not None:
+            try:
+                ocr_record.upload_date = datetime.strptime(upload_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid upload date format. Use YYYY-MM-DD"
+                )
+        
+        uploader = waybill_data.get('uploader')
+        if uploader is not None:
+            ocr_record.uploader = uploader
+        
+        # Update timestamp
+        ocr_record.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(ocr_record)
+        
+        logger.info(f"Updated waybill info for OCR record {record_id}")
+        return ocr_record
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update waybill info for OCR result {record_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update waybill information"
+        )
+
+
+@router.put("/results/{record_id}/audit")  
+def update_audit_status(
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser,
+    record_id: uuid.UUID,
+    audit_data: dict = Body(...),
+) -> OCRRecordPublic:
+    """
+    Update audit status for specific OCR record.
+    
+    Args:
+        record_id: OCR record UUID
+        audit_status: New audit status (未审核/已审核/审核通过/审核不通过)
+    
+    Returns:
+        Updated OCR record
+    """
+    try:
+        # Get audit status from request body
+        audit_status = audit_data.get('audit_status')
+        if not audit_status:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="audit_status is required"
+            )
+        
+        # Validate audit status
+        valid_statuses = ["未审核", "已审核", "审核通过", "审核不通过"]
+        if audit_status not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid audit status. Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        # Query for the specific record
+        query = select(OCRRecord).where(
+            OCRRecord.id == record_id,
+            OCRRecord.created_by == current_user.id
+        )
+        
+        ocr_record = db.exec(query).first()
+        
+        if not ocr_record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="OCR record not found"
+            )
+        
+        # Update audit status
+        ocr_record.audit_status = audit_status
+        ocr_record.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(ocr_record)
+        
+        logger.info(f"Updated audit status to '{audit_status}' for OCR record {record_id}")
+        return ocr_record
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update audit status for OCR result {record_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update audit status"
         )
 
 
