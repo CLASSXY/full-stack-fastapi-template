@@ -8,10 +8,4 @@ name = "frontend-production"
 [env.staging]
 name = "frontend-staging"
 
-[[env.production.route]]
-pattern = "full-stack-fastapi-template-7q0.pages.dev/*"
-zone_name = "full-stack-fastapi-template-7q0.pages.dev"
-
-[[env.staging.route]]
-pattern = "staging.full-stack-fastapi-template-7q0.pages.dev/*"
-zone_name = "full-stack-fastapi-template-7q0.pages.dev" 
+ 
