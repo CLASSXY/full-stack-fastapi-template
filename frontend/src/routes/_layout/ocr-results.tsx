@@ -16,13 +16,13 @@ import {
   EmptyState,
 } from "@chakra-ui/react"
 import { InputGroup } from "@/components/ui/input-group"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
+import { useQuery } from "@tanstack/react-query"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { FiEye, FiDownload, FiTrash2, FiSearch, FiX } from "react-icons/fi"
 import { z } from "zod"
 import { useState, useEffect } from "react"
 
-import { type ApiError, OcrService, type OCRRecordPublic } from "@/client"
+import { OcrService, type OCRRecordPublic } from "@/client"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
   DialogRoot,
@@ -52,36 +52,9 @@ export const Route = createFileRoute("/_layout/ocr-results")({
 
 const PER_PAGE = 10
 
-// Mock data for development
-const mockOCRData = {
-  data: [
-    {
-      id: "1",
-      device_sn: "DEV001",
-      original_image_url: "https://via.placeholder.com/300x200?text=Original",
-      result_image_url: "https://via.placeholder.com/300x200?text=Result",
-      ocr_text: "这是一个示例OCR识别文本",
-      ocr_confidence: 0.95,
-      scan_time: new Date().toISOString(),
-      status: "success",
-    },
-    {
-      id: "2", 
-      device_sn: "DEV002",
-      original_image_url: "https://via.placeholder.com/300x200?text=Original2",
-      result_image_url: null,
-      ocr_text: "另一个识别结果",
-      ocr_confidence: 0.78,
-      scan_time: new Date().toISOString(),
-      status: "processing",
-    },
-  ],
-  count: 2,
-}
 
 function OCRResultsTable() {
   const navigate = useNavigate({ from: Route.fullPath })
-  const queryClient = useQueryClient()
   const showToast = useCustomToast()
   const { page, device_sn } = Route.useSearch()
 
@@ -90,14 +63,6 @@ function OCRResultsTable() {
       search: (prev: { [key: string]: string }) => ({ ...prev, page }),
     })
 
-  const setDeviceSn = (deviceSn: string) =>
-    navigate({
-      search: (prev: { [key: string]: string }) => ({ 
-        ...prev, 
-        device_sn: deviceSn || undefined,
-        page: 1 
-      }),
-    })
 
   // TODO: Replace with actual API call when OCRService is available
   const {
@@ -253,12 +218,12 @@ function OCRResultsTable() {
     </>
   )
 
-  function handleDownload(recordId: string) {
+  function handleDownload(_recordId: string) {
     // TODO: 实现下载功能
     showToast.showSuccessToast("下载功能即将上线")
   }
 
-  function handleDelete(recordId: string) {
+  function handleDelete(_recordId: string) {
     // TODO: 实现删除功能
     showToast.showSuccessToast("删除功能即将上线")
   }
@@ -326,7 +291,7 @@ function OCRResults() {
               placeholder="输入设备SN筛选"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyPress}
               size="md"
               borderRadius="md"
               borderColor="gray.200"
