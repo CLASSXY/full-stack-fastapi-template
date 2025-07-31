@@ -143,7 +143,6 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
   } = useQuery({
     queryKey: ["waybills", { 
       page: currentPage, 
-      ...filters,
       refetchTrigger
     }],
     queryFn: async () => {
@@ -152,13 +151,41 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
         const skip = (currentPage - 1) * PER_PAGE
         const limit = PER_PAGE
         
-        // 注意：当前OcrService.getOcrResults只支持deviceSn, skip, limit参数
-        // 其他筛选参数暂时通过设备序列号模拟或需要后端API更新
-        const data = await OcrService.getOcrResults({
+        // 构建API请求参数，包含所有筛选条件
+        // 只有在refetchTrigger变化时才会使用filters中的筛选条件
+        const params = {
           skip,
           limit,
-          deviceSn: filters.waybill_number || undefined, // 暂时用waybill_number作为deviceSn搜索
+        }
+        
+        // 只有当refetchTrigger大于0时，才添加筛选条件
+        if (refetchTrigger > 0) {
+          Object.assign(params, {
+            device_sn: filters.waybill_number || undefined,
+            waybill_number: filters.waybill_number || undefined,
+            carrier: filters.carrier || undefined,
+            recipient: filters.recipient || undefined,
+            audit_status: filters.audit_status !== "全部" ? filters.audit_status : undefined,
+            upload_date_start: filters.upload_date_start || undefined,
+            upload_date_end: filters.upload_date_end || undefined,
+            shipping_date_start: filters.shipping_date_start || undefined,
+            shipping_date_end: filters.shipping_date_end || undefined,
+            delivery_date_start: filters.delivery_date_start || undefined,
+            delivery_date_end: filters.delivery_date_end || undefined,
+          })
+        }
+        
+        // 移除所有undefined的参数
+        Object.keys(params).forEach(key => {
+          const k = key as keyof typeof params;
+          if (params[k] === undefined) {
+            delete params[k];
+          }
         })
+        
+        console.log('查询参数:', params)
+        
+        const data = await OcrService.getOcrResults(params)
         
         return data
         
@@ -212,13 +239,10 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
     const formData = {
       waybill_number: record.waybill_number || record.device_sn || '',
       carrier: record.carrier || '',
-      shipping_date: record.shipping_date ? 
-        new Date(record.shipping_date).toISOString().split('T')[0] : '',
+      shipping_date: record.shipping_date || '',
       recipient: record.recipient || '',
-      delivery_date: record.delivery_date ? 
-        new Date(record.delivery_date).toISOString().split('T')[0] : '',
-      upload_date: record.upload_date ?
-        new Date(record.upload_date).toISOString().split('T')[0] : ''
+      delivery_date: record.delivery_date || '',
+      upload_date: record.upload_date || ''
     }
     console.log('Initializing edit form with:', formData)
     console.log('Record data:', record)
@@ -234,13 +258,10 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
       const formData = {
         waybill_number: selectedRecord.waybill_number || selectedRecord.device_sn || '',
         carrier: selectedRecord.carrier || '',
-        shipping_date: selectedRecord.shipping_date ? 
-          new Date(selectedRecord.shipping_date).toISOString().split('T')[0] : '',
+        shipping_date: selectedRecord.shipping_date || '',
         recipient: selectedRecord.recipient || '',
-        delivery_date: selectedRecord.delivery_date ? 
-          new Date(selectedRecord.delivery_date).toISOString().split('T')[0] : '',
-        upload_date: selectedRecord.upload_date ?
-          new Date(selectedRecord.upload_date).toISOString().split('T')[0] : ''
+        delivery_date: selectedRecord.delivery_date || '',
+        upload_date: selectedRecord.upload_date || ''
       }
       
       console.log('Setting form data:', formData)
@@ -419,10 +440,7 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
                   />
                 ) : (
                   <Text fontSize="sm">
-                    {selectedRecord.shipping_date ? 
-                      new Date(selectedRecord.shipping_date).toLocaleDateString("zh-CN") : 
-                      "2015/10/02"
-                    }
+                    {selectedRecord.shipping_date || "未设置"}
                   </Text>
                 )}
               </Box>
@@ -452,10 +470,7 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
                   />
                 ) : (
                   <Text fontSize="sm">
-                    {selectedRecord.delivery_date ? 
-                      new Date(selectedRecord.delivery_date).toLocaleDateString("zh-CN") : 
-                      "2015/10/10"
-                    }
+                    {selectedRecord.delivery_date || "未设置"}
                   </Text>
                 )}
               </Box>
@@ -463,10 +478,7 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
               <Box w="full">
                 <Text fontSize="xs" fontWeight="medium" color="gray.500" mb={1}>上传日期</Text>
                 <Text fontSize="sm">
-                  {selectedRecord.upload_date ? 
-                    new Date(selectedRecord.upload_date).toLocaleDateString("zh-CN") : 
-                    new Date(selectedRecord.scan_time).toLocaleDateString("zh-CN")
-                  }
+                  {selectedRecord.upload_date || new Date(selectedRecord.scan_time).toLocaleDateString("zh-CN")}
                 </Text>
               </Box>
               
@@ -683,10 +695,15 @@ function Waybills() {
     audit_status: "全部",
   })
 
+  // 用于传递给WaybillsTable组件的当前应用的筛选条件
+  const [appliedFilters, setAppliedFilters] = useState({...filters})
+  
   // 获取WaybillsTable组件的引用以触发搜索
   const [shouldRefetch, setShouldRefetch] = useState(0)
 
   const handleSearch = () => {
+    // 应用当前筛选条件
+    setAppliedFilters({...filters})
     // 通过改变状态值来触发WaybillsTable重新获取数据
     setShouldRefetch(prev => prev + 1)
   }
@@ -705,6 +722,7 @@ function Waybills() {
       audit_status: "全部",
     }
     setFilters(resetFilters)
+    setAppliedFilters(resetFilters)
     setShouldRefetch(prev => prev + 1)
   }
 
@@ -840,8 +858,6 @@ function Waybills() {
                 <option value="全部">全部</option>
                 <option value="未审核">未审核</option>
                 <option value="已审核">已审核</option>
-                <option value="审核通过">审核通过</option>
-                <option value="审核不通过">审核不通过</option>
               </select>
             </HStack>
           </HStack>
@@ -869,7 +885,7 @@ function Waybills() {
         </Flex>
       </Box>
 
-      <WaybillsTable filters={filters} refetchTrigger={shouldRefetch} onDataChange={() => setShouldRefetch(prev => prev + 1)} />
+      <WaybillsTable filters={appliedFilters} refetchTrigger={shouldRefetch} onDataChange={() => setShouldRefetch(prev => prev + 1)} />
     </Container>
   )
 }
@@ -997,7 +1013,7 @@ function ImageViewer({ src, alt }: { src?: string | null; alt: string }) {
   }
 
   return (
-    <VStack spacing={2} align="stretch">
+          <VStack gap={2} align="stretch">
       <Box
         ref={containerRef}
         w="100%"

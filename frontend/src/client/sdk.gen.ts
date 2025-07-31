@@ -272,7 +272,17 @@ export class OcrService {
             query: {
                 skip: data.skip,
                 limit: data.limit,
-                device_sn: data.deviceSn
+                device_sn: data.deviceSn,
+                waybill_number: data.waybill_number,
+                carrier: data.carrier,
+                recipient: data.recipient,
+                audit_status: data.audit_status,
+                upload_date_start: data.upload_date_start,
+                upload_date_end: data.upload_date_end,
+                shipping_date_start: data.shipping_date_start,
+                shipping_date_end: data.shipping_date_end,
+                delivery_date_start: data.delivery_date_start,
+                delivery_date_end: data.delivery_date_end
             },
             errors: {
                 422: 'Validation Error'

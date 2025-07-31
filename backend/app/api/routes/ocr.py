@@ -467,11 +467,12 @@ def update_waybill_info(
         if shipping_date is not None:
             try:
                 # 只支持日期格式: YYYY-MM-DD
-                if 'T' in shipping_date:
-                    # 如果包含时间部分，只取日期部分
-                    shipping_date = shipping_date.split('T')[0]
-                # 转换为日期对象
-                ocr_record.shipping_date = date.fromisoformat(shipping_date)
+                if shipping_date and isinstance(shipping_date, str):
+                    if 'T' in shipping_date:
+                        # 如果包含时间部分，只取日期部分
+                        shipping_date = shipping_date.split('T')[0]
+                    # 转换为日期对象
+                    ocr_record.shipping_date = date.fromisoformat(shipping_date)
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -486,11 +487,12 @@ def update_waybill_info(
         if delivery_date is not None:
             try:
                 # 只支持日期格式: YYYY-MM-DD
-                if 'T' in delivery_date:
-                    # 如果包含时间部分，只取日期部分
-                    delivery_date = delivery_date.split('T')[0]
-                # 转换为日期对象
-                ocr_record.delivery_date = date.fromisoformat(delivery_date)
+                if delivery_date and isinstance(delivery_date, str):
+                    if 'T' in delivery_date:
+                        # 如果包含时间部分，只取日期部分
+                        delivery_date = delivery_date.split('T')[0]
+                    # 转换为日期对象
+                    ocr_record.delivery_date = date.fromisoformat(delivery_date)
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -500,8 +502,13 @@ def update_waybill_info(
         upload_date = waybill_data.get('upload_date')
         if upload_date is not None:
             try:
-                # 转换为日期对象
-                ocr_record.upload_date = date.fromisoformat(upload_date)
+                # 只支持日期格式: YYYY-MM-DD
+                if upload_date and isinstance(upload_date, str):
+                    if 'T' in upload_date:
+                        # 如果包含时间部分，只取日期部分
+                        upload_date = upload_date.split('T')[0]
+                    # 转换为日期对象
+                    ocr_record.upload_date = date.fromisoformat(upload_date)
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,

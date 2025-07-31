@@ -212,6 +212,16 @@ export type OcrGetOcrResultsData = {
     deviceSn?: (string | null);
     limit?: number;
     skip?: number;
+    waybill_number?: (string | null);
+    carrier?: (string | null);
+    recipient?: (string | null);
+    audit_status?: (string | null);
+    upload_date_start?: (string | null);
+    upload_date_end?: (string | null);
+    shipping_date_start?: (string | null);
+    shipping_date_end?: (string | null);
+    delivery_date_start?: (string | null);
+    delivery_date_end?: (string | null);
 };
 
 export type OcrGetOcrResultsResponse = (OCRRecordsPublic);
