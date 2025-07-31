@@ -6,7 +6,7 @@ Provides endpoints for OCR processing and result management.
 
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Body
@@ -251,55 +251,45 @@ def get_ocr_results(
         # Add date range filters
         if upload_date_start:
             try:
-                from datetime import datetime
-                start_date = datetime.strptime(upload_date_start, "%Y-%m-%d").date()
+                start_date = date.fromisoformat(upload_date_start)
                 query = query.where(OCRRecord.upload_date >= start_date)
             except ValueError:
-                pass  # Invalid date format, ignore filter
+                pass  # 无效的日期格式，忽略过滤条件
         
         if upload_date_end:
             try:
-                from datetime import datetime
-                end_date = datetime.strptime(upload_date_end, "%Y-%m-%d").date()
-                # Add one day to include the entire end date
-                end_date = datetime.combine(end_date, datetime.max.time())
+                end_date = date.fromisoformat(upload_date_end)
                 query = query.where(OCRRecord.upload_date <= end_date)
             except ValueError:
-                pass  # Invalid date format, ignore filter
+                pass  # 无效的日期格式，忽略过滤条件
         
         if shipping_date_start:
             try:
-                from datetime import datetime
-                start_date = datetime.strptime(shipping_date_start, "%Y-%m-%d").date()
+                start_date = date.fromisoformat(shipping_date_start)
                 query = query.where(OCRRecord.shipping_date >= start_date)
             except ValueError:
-                pass
+                pass  # 无效的日期格式，忽略过滤条件
         
         if shipping_date_end:
             try:
-                from datetime import datetime
-                end_date = datetime.strptime(shipping_date_end, "%Y-%m-%d").date()
-                end_date = datetime.combine(end_date, datetime.max.time())
+                end_date = date.fromisoformat(shipping_date_end)
                 query = query.where(OCRRecord.shipping_date <= end_date)
             except ValueError:
-                pass
+                pass  # 无效的日期格式，忽略过滤条件
         
         if delivery_date_start:
             try:
-                from datetime import datetime
-                start_date = datetime.strptime(delivery_date_start, "%Y-%m-%d").date()
+                start_date = date.fromisoformat(delivery_date_start)
                 query = query.where(OCRRecord.delivery_date >= start_date)
             except ValueError:
-                pass
+                pass  # 无效的日期格式，忽略过滤条件
         
         if delivery_date_end:
             try:
-                from datetime import datetime
-                end_date = datetime.strptime(delivery_date_end, "%Y-%m-%d").date()
-                end_date = datetime.combine(end_date, datetime.max.time())
+                end_date = date.fromisoformat(delivery_date_end)
                 query = query.where(OCRRecord.delivery_date <= end_date)
             except ValueError:
-                pass
+                pass  # 无效的日期格式，忽略过滤条件
         
         # Get total count for pagination (before applying limit/offset)
         count_query = query
@@ -476,11 +466,16 @@ def update_waybill_info(
         shipping_date = waybill_data.get('shipping_date')
         if shipping_date is not None:
             try:
-                ocr_record.shipping_date = datetime.strptime(shipping_date, "%Y-%m-%d")
+                # 只支持日期格式: YYYY-MM-DD
+                if 'T' in shipping_date:
+                    # 如果包含时间部分，只取日期部分
+                    shipping_date = shipping_date.split('T')[0]
+                # 转换为日期对象
+                ocr_record.shipping_date = date.fromisoformat(shipping_date)
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid shipping date format. Use YYYY-MM-DD"
+                    detail="无效的发货日期格式。请使用 YYYY-MM-DD 格式"
                 )
         
         recipient = waybill_data.get('recipient')
@@ -490,21 +485,27 @@ def update_waybill_info(
         delivery_date = waybill_data.get('delivery_date')
         if delivery_date is not None:
             try:
-                ocr_record.delivery_date = datetime.strptime(delivery_date, "%Y-%m-%d")
+                # 只支持日期格式: YYYY-MM-DD
+                if 'T' in delivery_date:
+                    # 如果包含时间部分，只取日期部分
+                    delivery_date = delivery_date.split('T')[0]
+                # 转换为日期对象
+                ocr_record.delivery_date = date.fromisoformat(delivery_date)
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid delivery date format. Use YYYY-MM-DD"
+                    detail="无效的签收日期格式。请使用 YYYY-MM-DD 格式"
                 )
         
         upload_date = waybill_data.get('upload_date')
         if upload_date is not None:
             try:
-                ocr_record.upload_date = datetime.strptime(upload_date, "%Y-%m-%d")
+                # 转换为日期对象
+                ocr_record.upload_date = date.fromisoformat(upload_date)
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid upload date format. Use YYYY-MM-DD"
+                    detail="无效的上传日期格式。请使用 YYYY-MM-DD 格式"
                 )
         
         uploader = waybill_data.get('uploader')
@@ -729,4 +730,220 @@ Recognized Text:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to download OCR result"
-        ) 
+        )
+
+
+def extract_waybill_info(ocr_text: str) -> dict:
+    """
+    从OCR识别文本中提取面单信息
+    
+    这是一个简单的信息提取函数，可以根据实际需求进行优化
+    """
+    import re
+    
+    extracted = {}
+    
+    if not ocr_text:
+        return extracted
+    
+    # 提取运单号（通常是数字组合）
+    waybill_patterns = [
+        r'(\d{10,20})',  # 10-20位数字
+        r'([A-Z]{2,4}\d{8,15})',  # 字母+数字组合
+    ]
+    
+    for pattern in waybill_patterns:
+        match = re.search(pattern, ocr_text)
+        if match:
+            extracted["waybill_number"] = match.group(1)
+            break
+    
+    # 提取常见快递公司名称
+    carriers = [
+        "顺丰", "圆通", "申通", "中通", "韵达", "百世", "德邦", "京东", "菜鸟",
+        "EMS", "邮政", "天天", "宅急送", "国通", "全峰", "速尔", "优速"
+    ]
+    
+    for carrier in carriers:
+        if carrier in ocr_text:
+            extracted["carrier"] = carrier
+            break
+    
+    # 提取收件人信息（简单匹配）
+    recipient_patterns = [
+        r'收件人[：:]\s*([^\s\n]{2,10})',
+        r'签收人[：:]\s*([^\s\n]{2,10})',
+    ]
+    
+    for pattern in recipient_patterns:
+        match = re.search(pattern, ocr_text)
+        if match:
+            extracted["recipient"] = match.group(1)
+            break
+    
+    # 提取日期信息
+    date_patterns = [
+        r'(\d{4}[-/]\d{1,2}[-/]\d{1,2})',
+        r'(\d{4}年\d{1,2}月\d{1,2}日)',
+    ]
+    
+    for pattern in date_patterns:
+        match = re.search(pattern, ocr_text)
+        if match:
+            date_str = match.group(1)
+            # 标准化日期格式
+            date_str = date_str.replace('年', '-').replace('月', '-').replace('日', '')
+            date_str = date_str.replace('/', '-')
+            extracted["shipping_date"] = date_str
+            break
+    
+    return extracted
+
+
+@router.post("/upload-waybill", response_model=OCRRecordPublic)
+async def upload_waybill(
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser,
+    image_file: UploadFile = File(...),
+    device_sn: Annotated[str | None, Form()] = None,
+) -> OCRRecord:
+    """
+    上传面单图片并进行OCR识别
+    
+    这是专门为面单管理新增按钮设计的接口，
+    会自动生成设备序列号并进行OCR处理。
+    
+    Args:
+        image_file: 面单图片文件
+        device_sn: 可选的设备序列号，如果不提供会自动生成
+    
+    Returns:
+        OCR识别结果
+    """
+    try:
+        # 如果没有提供设备序列号，自动生成一个
+        if not device_sn:
+            device_sn = f"WAYBILL_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(current_user.id)[:8]}"
+        
+        # 读取文件内容
+        file_content = await image_file.read()
+        
+        # 验证图片文件
+        validation_result = await ocr_service.validate_image(
+            file_content, 
+            image_file.filename or "waybill_image"
+        )
+        if not validation_result["valid"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"无效的图片文件: {validation_result['error']}"
+            )
+        
+        # 创建OCR记录
+        ocr_record = OCRRecord(
+            device_sn=device_sn,
+            original_image_url="",  # 将在文件上传后更新
+            language="ch",  # 默认中文识别
+            use_angle_cls=True,  # 启用文档方向分类
+            file_size=validation_result["file_size"],
+            image_format=validation_result["format"],
+            status="processing",
+            created_by=current_user.id,
+            scan_time=datetime.utcnow(),
+            upload_date=date.today(),  # 设置上传日期为今天
+            uploader=current_user.full_name or current_user.email,  # 设置上传人
+            audit_status="未审核"  # 默认审核状态
+        )
+        
+        db.add(ocr_record)
+        db.commit()
+        db.refresh(ocr_record)
+        
+        try:
+            # 上传原始图片到R2存储
+            original_image_url = await ocr_service.upload_to_r2(
+                file_content, 
+                image_file.filename or "waybill_image"
+            )
+            
+            # 更新记录中的图片URL
+            ocr_record.original_image_url = original_image_url
+            db.commit()
+            
+            # 保存到临时文件进行OCR处理
+            temp_file_path = await ocr_service.save_to_temp_file(
+                file_content, 
+                image_file.filename or "waybill_image"
+            )
+            
+            # 执行OCR识别
+            ocr_result = await ocr_service.process_ocr(
+                image_path=temp_file_path,
+                language="ch",
+                use_angle_cls=True,
+                confidence_thresh=0.6,  # 面单识别使用较高的置信度阈值
+                ocr_record_id=str(ocr_record.id)
+            )
+            
+            if ocr_result["success"]:
+                # 更新OCR记录
+                ocr_record.ocr_text = ocr_result["ocr_text"]
+                ocr_record.ocr_confidence = ocr_result["ocr_confidence"]
+                ocr_record.detection_boxes = {
+                    "boxes": ocr_result["detection_boxes"],
+                    "total_boxes": ocr_result["total_boxes"]
+                }
+                ocr_record.processing_time = ocr_result["processing_time"]
+                ocr_record.result_image_url = ocr_result.get("result_image_url", "")
+                ocr_record.status = "success"
+                
+                # 尝试从OCR文本中提取面单信息
+                extracted_info = extract_waybill_info(ocr_result["ocr_text"])
+                if extracted_info:
+                    ocr_record.waybill_number = extracted_info.get("waybill_number")
+                    ocr_record.carrier = extracted_info.get("carrier")
+                    ocr_record.recipient = extracted_info.get("recipient")
+                    if extracted_info.get("shipping_date"):
+                        try:
+                            ocr_record.shipping_date = date.fromisoformat(
+                                extracted_info["shipping_date"]
+                            )
+                        except ValueError:
+                            pass
+                
+            else:
+                # 处理失败
+                ocr_record.status = "failed"
+                ocr_record.error_message = ocr_result["error"]
+                ocr_record.processing_time = ocr_result["processing_time"]
+            
+            # 清理临时文件
+            await ocr_service.cleanup_temp_files(temp_file_path)
+            
+            ocr_record.updated_at = datetime.utcnow()
+            db.commit()
+            db.refresh(ocr_record)
+            
+            logger.info(f"面单上传和OCR处理完成，记录ID: {ocr_record.id}")
+            return ocr_record
+            
+        except Exception as e:
+            # 更新记录状态为失败
+            ocr_record.status = "failed"
+            ocr_record.error_message = str(e)
+            ocr_record.updated_at = datetime.utcnow()
+            db.commit()
+            db.refresh(ocr_record)
+            
+            logger.error(f"面单OCR处理失败，记录ID: {ocr_record.id}, 错误: {e}")
+            return ocr_record
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"面单上传接口失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="面单上传处理失败"
+        )

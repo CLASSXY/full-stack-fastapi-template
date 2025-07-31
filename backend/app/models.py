@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any
 
 from pydantic import EmailStr
@@ -114,10 +114,10 @@ class OCRRecordBase(SQLModel):
     # 运单相关字段
     waybill_number: str | None = Field(default=None, max_length=255, index=True)  # 发货单号
     carrier: str | None = Field(default=None, max_length=255)  # 承运商
-    shipping_date: datetime | None = Field(default=None)  # 发货日期
+    shipping_date: date | None = Field(default=None)  # 发货日期
     recipient: str | None = Field(default=None, max_length=255)  # 签收人
-    delivery_date: datetime | None = Field(default=None)  # 签收日期
-    upload_date: datetime | None = Field(default=None)  # 上传日期
+    delivery_date: date | None = Field(default=None)  # 签收日期
+    upload_date: date | None = Field(default=None)  # 上传日期
     uploader: str | None = Field(default=None, max_length=255)  # 上传人
     audit_status: str = Field(default="未审核", max_length=50)  # 审核状态: 未审核/已审核/审核通过/审核不通过
 
