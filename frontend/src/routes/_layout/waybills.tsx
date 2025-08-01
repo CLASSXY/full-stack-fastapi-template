@@ -69,7 +69,6 @@ const mockWaybillData = {
   data: [
     {
       id: "1",
-      device_sn: "DEV001",
       waybill_number: "77301475051865１",
       carrier: "XXX物流",
       shipping_date: "2015-10-02T08:50:08",
@@ -87,7 +86,6 @@ const mockWaybillData = {
     },
     {
       id: "2",
-      device_sn: "DEV002", 
       waybill_number: "77301475051865２",
       carrier: "YYY快递",
       shipping_date: "2015-10-03T14:20:30",
@@ -152,34 +150,31 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
         const limit = PER_PAGE
         
         // 构建API请求参数，包含所有筛选条件
-        // 只有在refetchTrigger变化时才会使用filters中的筛选条件
-        const params = {
+        const params: any = {
           skip,
           limit,
         }
         
-        // 只有当refetchTrigger大于0时，才添加筛选条件
+        // 如果有筛选触发器（用户点击了查询按钮），则添加筛选条件
         if (refetchTrigger > 0) {
           Object.assign(params, {
-            device_sn: filters.waybill_number || undefined,
-            waybill_number: filters.waybill_number || undefined,
+            waybillNumber: filters.waybill_number || undefined,
             carrier: filters.carrier || undefined,
             recipient: filters.recipient || undefined,
-            audit_status: filters.audit_status !== "全部" ? filters.audit_status : undefined,
-            upload_date_start: filters.upload_date_start || undefined,
-            upload_date_end: filters.upload_date_end || undefined,
-            shipping_date_start: filters.shipping_date_start || undefined,
-            shipping_date_end: filters.shipping_date_end || undefined,
-            delivery_date_start: filters.delivery_date_start || undefined,
-            delivery_date_end: filters.delivery_date_end || undefined,
+            auditStatus: filters.audit_status !== "全部" ? filters.audit_status : undefined,
+            uploadDateStart: filters.upload_date_start || undefined,
+            uploadDateEnd: filters.upload_date_end || undefined,
+            shippingDateStart: filters.shipping_date_start || undefined,
+            shippingDateEnd: filters.shipping_date_end || undefined,
+            deliveryDateStart: filters.delivery_date_start || undefined,
+            deliveryDateEnd: filters.delivery_date_end || undefined,
           })
         }
         
         // 移除所有undefined的参数
         Object.keys(params).forEach(key => {
-          const k = key as keyof typeof params;
-          if (params[k] === undefined) {
-            delete params[k];
+          if (params[key] === undefined) {
+            delete params[key];
           }
         })
         
@@ -237,7 +232,7 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
   // 初始化编辑表单数据
   const initializeEditForm = (record: ExtendedOCRRecord) => {
     const formData = {
-      waybill_number: record.waybill_number || record.device_sn || '',
+      waybill_number: record.waybill_number || '',
       carrier: record.carrier || '',
       shipping_date: record.shipping_date || '',
       recipient: record.recipient || '',
@@ -256,7 +251,7 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
       console.log('Entering edit mode for record:', selectedRecord)
       
       const formData = {
-        waybill_number: selectedRecord.waybill_number || selectedRecord.device_sn || '',
+        waybill_number: selectedRecord.waybill_number || '',
         carrier: selectedRecord.carrier || '',
         shipping_date: selectedRecord.shipping_date || '',
         recipient: selectedRecord.recipient || '',
@@ -383,7 +378,7 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
                   color={selectedRecord?.id === record.id ? "blue.600" : "gray.800"}
                   fontSize="sm"
                 >
-                  {record.waybill_number || record.device_sn}
+                  {record.waybill_number || '未设置'}
                 </Text>
               </Box>
             ))}
@@ -411,7 +406,7 @@ function WaybillsTable({ filters, refetchTrigger, onDataChange }: {
                     onFocus={() => console.log('Waybill input focused, current value:', editFormData.waybill_number)}
                   />
                 ) : (
-                  <Text fontSize="sm" fontWeight="medium">{selectedRecord.waybill_number || selectedRecord.device_sn}</Text>
+                  <Text fontSize="sm" fontWeight="medium">{selectedRecord.waybill_number || '未设置'}</Text>
                 )}
               </Box>
               
@@ -1133,7 +1128,7 @@ function UploadModal({ onUploadSuccess }: { onUploadSuccess: () => void }) {
       // 创建FormData对象
       const formData = new FormData()
       formData.append('image_file', file)
-      // 不提供device_sn，让后端自动生成
+      // 不需要提供device_sn字段
       
       // 直接调用后端API，使用正确的基础URL
       const baseUrl = OpenAPI.BASE || 'http://localhost:8000'

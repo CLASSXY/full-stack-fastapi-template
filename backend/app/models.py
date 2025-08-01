@@ -98,7 +98,6 @@ class ItemsPublic(SQLModel):
 # Shared properties for OCR records (运单识别记录)
 class OCRRecordBase(SQLModel):
     # 基础信息
-    device_sn: str = Field(max_length=255, index=True)
     original_image_url: str = Field(max_length=500)
     result_image_url: str | None = Field(default=None, max_length=500)
     ocr_text: str | None = Field(default=None)
@@ -124,7 +123,6 @@ class OCRRecordBase(SQLModel):
 
 # Properties to receive on OCR record creation
 class OCRRecordCreate(SQLModel):
-    device_sn: str = Field(max_length=255)
     language: str = Field(default="ch", max_length=20)
     use_angle_cls: bool = Field(default=False)
     use_dilation: bool = Field(default=False)

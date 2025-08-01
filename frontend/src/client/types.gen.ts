@@ -10,12 +10,15 @@ export type Body_login_login_access_token = {
 };
 
 export type Body_ocr_process_ocr = {
-    device_sn: string;
     image_file: (Blob | File);
     language?: string;
     use_angle_cls?: boolean;
     use_dilation?: boolean;
     confidence_thresh?: number;
+};
+
+export type Body_ocr_upload_waybill = {
+    image_file: (Blob | File);
 };
 
 export type HTTPValidationError = {
@@ -54,7 +57,6 @@ export type NewPassword = {
 };
 
 export type OCRRecordPublic = {
-    device_sn: string;
     original_image_url: string;
     result_image_url?: (string | null);
     ocr_text?: (string | null);
@@ -66,6 +68,14 @@ export type OCRRecordPublic = {
     file_size?: (number | null);
     image_format?: (string | null);
     use_angle_cls?: boolean;
+    waybill_number?: (string | null);
+    carrier?: (string | null);
+    shipping_date?: (string | null);
+    recipient?: (string | null);
+    delivery_date?: (string | null);
+    upload_date?: (string | null);
+    uploader?: (string | null);
+    audit_status?: string;
     id: string;
     detection_boxes?: ({
     [key: string]: unknown;
@@ -79,6 +89,18 @@ export type OCRRecordPublic = {
 export type OCRRecordsPublic = {
     data: Array<OCRRecordPublic>;
     count: number;
+};
+
+export type OCRRecordUpdate = {
+    ocr_text?: (string | null);
+    ocr_confidence?: (number | null);
+    result_image_url?: (string | null);
+    processing_time?: (number | null);
+    status?: (string | null);
+    error_message?: (string | null);
+    detection_boxes?: ({
+    [key: string]: unknown;
+} | null);
 };
 
 export type PrivateUserCreate = {
@@ -209,19 +231,18 @@ export type OcrProcessOcrData = {
 export type OcrProcessOcrResponse = (OCRRecordPublic);
 
 export type OcrGetOcrResultsData = {
-    deviceSn?: (string | null);
-    limit?: number;
-    skip?: number;
-    waybill_number?: (string | null);
+    auditStatus?: (string | null);
     carrier?: (string | null);
+    deliveryDateEnd?: (string | null);
+    deliveryDateStart?: (string | null);
+    limit?: number;
     recipient?: (string | null);
-    audit_status?: (string | null);
-    upload_date_start?: (string | null);
-    upload_date_end?: (string | null);
-    shipping_date_start?: (string | null);
-    shipping_date_end?: (string | null);
-    delivery_date_start?: (string | null);
-    delivery_date_end?: (string | null);
+    shippingDateEnd?: (string | null);
+    shippingDateStart?: (string | null);
+    skip?: number;
+    uploadDateEnd?: (string | null);
+    uploadDateStart?: (string | null);
+    waybillNumber?: (string | null);
 };
 
 export type OcrGetOcrResultsResponse = (OCRRecordsPublic);
@@ -232,6 +253,13 @@ export type OcrGetOcrResultData = {
 
 export type OcrGetOcrResultResponse = (OCRRecordPublic);
 
+export type OcrUpdateOcrResultData = {
+    recordId: string;
+    requestBody: OCRRecordUpdate;
+};
+
+export type OcrUpdateOcrResultResponse = (OCRRecordPublic);
+
 export type OcrDeleteOcrResultData = {
     recordId: string;
 };
@@ -240,6 +268,24 @@ export type OcrDeleteOcrResultResponse = ({
     [key: string]: unknown;
 });
 
+export type OcrUpdateWaybillInfoData = {
+    recordId: string;
+    requestBody: {
+        [key: string]: unknown;
+    };
+};
+
+export type OcrUpdateWaybillInfoResponse = (OCRRecordPublic);
+
+export type OcrUpdateAuditStatusData = {
+    recordId: string;
+    requestBody: {
+        [key: string]: unknown;
+    };
+};
+
+export type OcrUpdateAuditStatusResponse = (OCRRecordPublic);
+
 export type OcrDownloadOcrTextData = {
     recordId: string;
 };
@@ -247,6 +293,12 @@ export type OcrDownloadOcrTextData = {
 export type OcrDownloadOcrTextResponse = ({
     [key: string]: unknown;
 });
+
+export type OcrUploadWaybillData = {
+    formData: Body_ocr_upload_waybill;
+};
+
+export type OcrUploadWaybillResponse = (OCRRecordPublic);
 
 export type PrivateCreateUserData = {
     requestBody: PrivateUserCreate;

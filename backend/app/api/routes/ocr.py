@@ -63,7 +63,6 @@ async def process_ocr(
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser,
-    device_sn: Annotated[str, Form()],
     image_file: UploadFile = File(...),
     language: Annotated[str, Form()] = "ch",
     use_angle_cls: Annotated[bool, Form()] = False,
@@ -74,7 +73,6 @@ async def process_ocr(
     Process OCR on uploaded image file.
     
     Args:
-        device_sn: Device serial number
         image_file: Image file to process
         language: OCR language (default: 'ch')
         use_angle_cls: Whether to use document orientation classification
@@ -98,7 +96,6 @@ async def process_ocr(
         
         # Create initial OCR record
         ocr_record = OCRRecord(
-            device_sn=device_sn,
             original_image_url="",  # Will be updated after file upload
             language=language,
             use_angle_cls=use_angle_cls,
@@ -191,7 +188,6 @@ def get_ocr_results(
     current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
-    device_sn: str | None = None,
     waybill_number: str | None = None,
     carrier: str | None = None,
     recipient: str | None = None,
@@ -209,7 +205,6 @@ def get_ocr_results(
     Args:
         skip: Number of records to skip
         limit: Maximum number of records to return
-        device_sn: Optional device SN filter
         waybill_number: Optional waybill number filter
         carrier: Optional carrier filter
         recipient: Optional recipient filter
@@ -227,10 +222,6 @@ def get_ocr_results(
     try:
         # Build base query
         query = select(OCRRecord).where(OCRRecord.created_by == current_user.id)
-        
-        # Add device_sn filter if provided (case-insensitive partial match)
-        if device_sn:
-            query = query.where(OCRRecord.device_sn.ilike(f"%{device_sn}%"))
         
         # Add waybill_number filter if provided (case-insensitive partial match)
         if waybill_number:
@@ -712,7 +703,6 @@ async def download_ocr_text(
         
         # Format download content
         download_content = f"""OCR Result
-Device SN: {ocr_record.device_sn}
 Scan Time: {ocr_record.scan_time}
 Language: {ocr_record.language}
 Confidence: {ocr_record.ocr_confidence:.2f}
@@ -726,7 +716,7 @@ Recognized Text:
         # For now, return the content
         return {
             "content": download_content,
-            "filename": f"ocr_result_{ocr_record.device_sn}_{ocr_record.scan_time.strftime('%Y%m%d_%H%M%S')}.txt",
+            "filename": f"ocr_result_{ocr_record.scan_time.strftime('%Y%m%d_%H%M%S')}.txt",
             "content_type": "text/plain"
         }
         
@@ -944,26 +934,20 @@ async def upload_waybill(
     db: Session = Depends(get_db),
     current_user: CurrentUser,
     image_file: UploadFile = File(...),
-    device_sn: Annotated[str | None, Form()] = None,
 ) -> OCRRecord:
     """
     上传面单图片并进行OCR识别
     
     这是专门为面单管理新增按钮设计的接口，
-    会自动生成设备序列号并进行OCR处理。
+    会自动进行OCR处理。
     
     Args:
         image_file: 面单图片文件
-        device_sn: 可选的设备序列号，如果不提供会自动生成
     
     Returns:
         OCR识别结果
     """
     try:
-        # 如果没有提供设备序列号，自动生成一个
-        if not device_sn:
-            device_sn = f"WAYBILL_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(current_user.id)[:8]}"
-        
         # 读取文件内容
         file_content = await image_file.read()
         
@@ -980,7 +964,6 @@ async def upload_waybill(
         
         # 创建OCR记录
         ocr_record = OCRRecord(
-            device_sn=device_sn,
             original_image_url="",  # 将在文件上传后更新
             language="ch",  # 默认中文识别
             use_angle_cls=True,  # 启用文档方向分类

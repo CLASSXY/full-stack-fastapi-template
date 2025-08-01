@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, OcrProcessOcrData, OcrProcessOcrResponse, OcrGetOcrResultsData, OcrGetOcrResultsResponse, OcrGetOcrResultData, OcrGetOcrResultResponse, OcrDeleteOcrResultData, OcrDeleteOcrResultResponse, OcrDownloadOcrTextData, OcrDownloadOcrTextResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, OcrProcessOcrData, OcrProcessOcrResponse, OcrGetOcrResultsData, OcrGetOcrResultsResponse, OcrGetOcrResultData, OcrGetOcrResultResponse, OcrUpdateOcrResultData, OcrUpdateOcrResultResponse, OcrDeleteOcrResultData, OcrDeleteOcrResultResponse, OcrUpdateWaybillInfoData, OcrUpdateWaybillInfoResponse, OcrUpdateAuditStatusData, OcrUpdateAuditStatusResponse, OcrDownloadOcrTextData, OcrDownloadOcrTextResponse, OcrUploadWaybillData, OcrUploadWaybillResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class ItemsService {
     /**
@@ -221,7 +221,6 @@ export class OcrService {
      * Process OCR on uploaded image file.
      *
      * Args:
-     * device_sn: Device serial number
      * image_file: Image file to process
      * language: OCR language (default: 'ch')
      * use_angle_cls: Whether to use document orientation classification
@@ -249,19 +248,37 @@ export class OcrService {
     
     /**
      * Get Ocr Results
-     * Get OCR results with pagination and optional filtering.
+     * Get OCR results with pagination and filtering.
      *
      * Args:
      * skip: Number of records to skip
      * limit: Maximum number of records to return
-     * device_sn: Optional device SN filter
+     * waybill_number: Optional waybill number filter
+     * carrier: Optional carrier filter
+     * recipient: Optional recipient filter
+     * audit_status: Optional audit status filter
+     * upload_date_start: Optional upload date start filter (YYYY-MM-DD)
+     * upload_date_end: Optional upload date end filter (YYYY-MM-DD)
+     * shipping_date_start: Optional shipping date start filter (YYYY-MM-DD)
+     * shipping_date_end: Optional shipping date end filter (YYYY-MM-DD)
+     * delivery_date_start: Optional delivery date start filter (YYYY-MM-DD)
+     * delivery_date_end: Optional delivery date end filter (YYYY-MM-DD)
      *
      * Returns:
      * Paginated OCR results
      * @param data The data for the request.
      * @param data.skip
      * @param data.limit
-     * @param data.deviceSn
+     * @param data.waybillNumber
+     * @param data.carrier
+     * @param data.recipient
+     * @param data.auditStatus
+     * @param data.uploadDateStart
+     * @param data.uploadDateEnd
+     * @param data.shippingDateStart
+     * @param data.shippingDateEnd
+     * @param data.deliveryDateStart
+     * @param data.deliveryDateEnd
      * @returns OCRRecordsPublic Successful Response
      * @throws ApiError
      */
@@ -272,17 +289,16 @@ export class OcrService {
             query: {
                 skip: data.skip,
                 limit: data.limit,
-                device_sn: data.deviceSn,
-                waybill_number: data.waybill_number,
+                waybill_number: data.waybillNumber,
                 carrier: data.carrier,
                 recipient: data.recipient,
-                audit_status: data.audit_status,
-                upload_date_start: data.upload_date_start,
-                upload_date_end: data.upload_date_end,
-                shipping_date_start: data.shipping_date_start,
-                shipping_date_end: data.shipping_date_end,
-                delivery_date_start: data.delivery_date_start,
-                delivery_date_end: data.delivery_date_end
+                audit_status: data.auditStatus,
+                upload_date_start: data.uploadDateStart,
+                upload_date_end: data.uploadDateEnd,
+                shipping_date_start: data.shippingDateStart,
+                shipping_date_end: data.shippingDateEnd,
+                delivery_date_start: data.deliveryDateStart,
+                delivery_date_end: data.deliveryDateEnd
             },
             errors: {
                 422: 'Validation Error'
@@ -318,6 +334,37 @@ export class OcrService {
     }
     
     /**
+     * Update Ocr Result
+     * Update specific OCR result by ID.
+     *
+     * Args:
+     * record_id: OCR record UUID
+     * record_update: Updated record data
+     *
+     * Returns:
+     * Updated OCR record
+     * @param data The data for the request.
+     * @param data.recordId
+     * @param data.requestBody
+     * @returns OCRRecordPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateOcrResult(data: OcrUpdateOcrResultData): CancelablePromise<OcrUpdateOcrResultResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/ocr/results/{record_id}',
+            path: {
+                record_id: data.recordId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
      * Delete Ocr Result
      * Delete specific OCR result by ID.
      *
@@ -345,6 +392,74 @@ export class OcrService {
     }
     
     /**
+     * Update Waybill Info
+     * Update waybill information for specific OCR record.
+     *
+     * Args:
+     * record_id: OCR record UUID
+     * waybill_number: Waybill number
+     * carrier: Carrier/logistics company
+     * shipping_date: Shipping date (YYYY-MM-DD)
+     * recipient: Recipient name
+     * delivery_date: Delivery date (YYYY-MM-DD)
+     * upload_date: Upload date (YYYY-MM-DD)
+     * uploader: Uploader name
+     *
+     * Returns:
+     * Updated OCR record
+     * @param data The data for the request.
+     * @param data.recordId
+     * @param data.requestBody
+     * @returns OCRRecordPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateWaybillInfo(data: OcrUpdateWaybillInfoData): CancelablePromise<OcrUpdateWaybillInfoResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/ocr/results/{record_id}/waybill',
+            path: {
+                record_id: data.recordId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Audit Status
+     * Update audit status for specific OCR record.
+     *
+     * Args:
+     * record_id: OCR record UUID
+     * audit_status: New audit status (未审核/已审核/审核通过/审核不通过)
+     *
+     * Returns:
+     * Updated OCR record
+     * @param data The data for the request.
+     * @param data.recordId
+     * @param data.requestBody
+     * @returns OCRRecordPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateAuditStatus(data: OcrUpdateAuditStatusData): CancelablePromise<OcrUpdateAuditStatusResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/ocr/results/{record_id}/audit',
+            path: {
+                record_id: data.recordId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
      * Download Ocr Text
      * Download OCR result as text file.
      *
@@ -365,6 +480,35 @@ export class OcrService {
             path: {
                 record_id: data.recordId
             },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Upload Waybill
+     * 上传面单图片并进行OCR识别
+     *
+     * 这是专门为面单管理新增按钮设计的接口，
+     * 会自动进行OCR处理。
+     *
+     * Args:
+     * image_file: 面单图片文件
+     *
+     * Returns:
+     * OCR识别结果
+     * @param data The data for the request.
+     * @param data.formData
+     * @returns OCRRecordPublic Successful Response
+     * @throws ApiError
+     */
+    public static uploadWaybill(data: OcrUploadWaybillData): CancelablePromise<OcrUploadWaybillResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/ocr/upload-waybill',
+            formData: data.formData,
+            mediaType: 'multipart/form-data',
             errors: {
                 422: 'Validation Error'
             }
