@@ -35,6 +35,9 @@ dependencies = [
     # R2 Storage dependencies
     "boto3>=1.26.0",
     "botocore>=1.29.0",
+    # AI dependencies for waybill info extraction
+    "langchain-ollama>=0.1.0",
+    "langchain-core>=0.1.0",
 ]
 
 [tool.uv]

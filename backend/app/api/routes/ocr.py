@@ -742,9 +742,140 @@ Recognized Text:
 
 def extract_waybill_info(ocr_text: str) -> dict:
     """
-    从OCR识别文本中提取面单信息
+    使用AI从OCR识别文本中提取面单信息
     
-    这是一个简单的信息提取函数，可以根据实际需求进行优化
+    使用langchain_ollama调用本地AI模型进行智能信息提取
+    """
+    if not ocr_text:
+        return {}
+    
+    try:
+        from langchain_ollama import ChatOllama
+        from langchain_core.prompts import ChatPromptTemplate
+        import json
+        
+        # 初始化 deepseek 模型
+        deepseek = ChatOllama(
+            base_url="http://10.100.200.241:11434",  # deepseek 服务地址
+            model="deepseek-r1:8b"  # 模型名称
+        )
+        
+        # 定义提示模板
+        prompt = ChatPromptTemplate.from_template(
+            """你是一个专业的快递面单信息提取专家。请从以下OCR识别的文本中提取快递面单的关键信息。
+
+注意：OCR文本可能是破碎的、不连续的，包含很多文本片段。你需要智能识别和推断其中的有用信息。
+
+OCR文本内容：
+{ocr_text}
+
+请提取以下信息（如果文本中没有相关信息，对应字段请返回空字符串）：
+
+1. 运单号/快递单号 (waybill_number)：
+   - 通常是10-20位的数字或字母数字组合
+   - 可能被*号包围，如*POD-123456789*
+   - 可能包含字母前缀，如SF、YTO、ZTO等
+
+2. 快递公司/承运商 (carrier)：
+   - 寻找顺丰、圆通、申通、中通、韵达、百世、德邦、京东等关键词
+   - 也可能是英文名称或缩写
+
+3. 收件人姓名 (recipient)：
+   - 寻找"收人"、"收件人"、"收货人"等关键词后的姓名
+   - 注意OCR可能识别错误，"收件人"可能显示为"收人"
+
+4. 发货日期 (shipping_date，格式：YYYY-MM-DD)：
+   - 寻找"发货时间"、"发货日期"、"寄件时间"、"寄件日期"等关键词
+   - 提取日期部分，忽略具体时间
+   - 日期格式多样：
+     * "2024-06-17 13:15" → "2024-06-17"
+     * "2024年7月15日" → "2024-07-15"
+     * "2024/07/15" → "2024-07-15"
+
+5. 签收日期/送达日期 (delivery_date，格式：YYYY-MM-DD)：
+   - 寻找"签收时间"、"签收日期"、"送达时间"、"送达日期"、"签收"等关键词
+   - 提取日期部分，忽略具体时间
+   - 日期格式多样：
+     * "2024-06-18 10:30" → "2024-06-18"
+     * "签收 2024-07-17" → "2024-07-17"
+     * "2024年7月17日签收" → "2024-07-17"
+
+请仔细分析文本片段，使用上下文和常识来推断信息。返回JSON格式，只返回JSON，不要包含其他说明文字：
+{{"waybill_number": "", "carrier": "", "recipient": "", "shipping_date": "", "delivery_date": ""}}"""
+        )
+        
+        # 创建对话链：模板 -> 模型 -> 输出
+        chain = prompt | deepseek
+        
+        # 调用链并生成回答
+        result = chain.invoke({"ocr_text": ocr_text})
+        
+        # 解析AI返回的JSON结果
+        try:
+            # 尝试直接解析JSON
+            extracted_info = json.loads(result.content.strip())
+            
+            # 验证返回的数据结构
+            valid_keys = {"waybill_number", "carrier", "recipient", "shipping_date", "delivery_date"}
+            if not isinstance(extracted_info, dict):
+                raise ValueError("AI返回的不是字典格式")
+            
+            # 过滤和清理数据
+            cleaned_info = {}
+            for key in valid_keys:
+                value = extracted_info.get(key, "")
+                if isinstance(value, str) and value.strip():
+                    cleaned_info[key] = value.strip()
+            
+            logger.info(f"AI成功提取面单信息: {cleaned_info}")
+            return cleaned_info
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"AI返回的内容不是有效的JSON格式: {result.content}")
+            # 尝试从文本中提取JSON部分
+            import re
+            
+            # 尝试多种JSON提取模式
+            json_patterns = [
+                r'\{[^{}]*"waybill_number"[^{}]*\}',  # 包含waybill_number的JSON
+                r'\{.*?"waybill_number".*?\}',        # 更宽松的匹配
+                r'```json\s*(\{.*?\})\s*```',         # markdown代码块中的JSON
+                r'(\{.*?\})',                         # 任何大括号包含的内容
+            ]
+            
+            for pattern in json_patterns:
+                json_match = re.search(pattern, result.content, re.DOTALL)
+                if json_match:
+                    try:
+                        json_str = json_match.group(1) if len(json_match.groups()) > 0 else json_match.group(0)
+                        extracted_info = json.loads(json_str)
+                        cleaned_info = {}
+                        valid_keys = {"waybill_number", "carrier", "recipient", "shipping_date", "delivery_date"}
+                        for key in valid_keys:
+                            value = extracted_info.get(key, "")
+                            if isinstance(value, str) and value.strip():
+                                cleaned_info[key] = value.strip()
+                        logger.info(f"使用模式 {pattern} 成功解析JSON: {cleaned_info}")
+                        return cleaned_info
+                    except json.JSONDecodeError:
+                        continue
+            
+            logger.error(f"所有JSON提取模式都失败，原始内容: {result.content[:500]}...")
+            return {}
+            
+    except ImportError as e:
+        logger.error(f"langchain_ollama模块导入失败: {e}")
+        # 降级到正则表达式方法
+        return _extract_waybill_info_regex(ocr_text)
+    except Exception as e:
+        logger.error(f"AI提取面单信息失败: {e}")
+        # 降级到正则表达式方法
+        return _extract_waybill_info_regex(ocr_text)
+
+
+def _extract_waybill_info_regex(ocr_text: str) -> dict:
+    """
+    正则表达式方法提取面单信息（作为AI方法的降级方案）
     """
     import re
     
@@ -915,6 +1046,13 @@ async def upload_waybill(
                         try:
                             ocr_record.shipping_date = date.fromisoformat(
                                 extracted_info["shipping_date"]
+                            )
+                        except ValueError:
+                            pass
+                    if extracted_info.get("delivery_date"):
+                        try:
+                            ocr_record.delivery_date = date.fromisoformat(
+                                extracted_info["delivery_date"]
                             )
                         except ValueError:
                             pass
