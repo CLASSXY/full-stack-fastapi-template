@@ -1263,6 +1263,7 @@ function UploadModal({ onUploadSuccess }: { onUploadSuccess: () => void }) {
     if (successfulUploads > 0) {
         showToast.showSuccessToast(`${successfulUploads}个文件上传成功！`)
         onUploadSuccess()
+        queryClient.invalidateQueries({ queryKey: ["waybills"] })
     }
     
     if (successfulUploads === totalFiles) {
