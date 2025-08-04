@@ -76,10 +76,16 @@ class OCREngine:
             
             # 初始化PaddleOCR引擎
             # 初始化PaddleOCR引擎 (适配PaddleOCR 3.1.0+ API)
+            if self.use_gpu and self._has_gpu():
+                paddle.set_device('gpu')
+                logger.info("✅ Set device to GPU")
+            else:
+                paddle.set_device('cpu')
+                logger.info("✅ Set device to CPU")
+
             self.ocr = PaddleOCR(
                 use_textline_orientation=self.use_textline_orientation,  # 文本行方向分类
                 lang=self.lang,  # 语言
-                use_gpu=self.use_gpu and self._has_gpu()  # GPU设备
             )
             
             # 初始化结果路径
