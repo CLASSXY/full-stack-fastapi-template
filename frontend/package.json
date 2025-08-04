@@ -10,8 +10,8 @@
     "lint": "biome check --apply-unsafe --no-errors-on-unmatched --files-ignore-unknown=true ./",
     "preview": "vite preview",
     "generate-client": "openapi-ts",
-    "deploy:preview": "wrangler pages deploy dist --project-name=frontend --compatibility-date=2024-01-01",
-    "deploy:production": "wrangler pages deploy dist --project-name=frontend --compatibility-date=2024-01-01 --env=production"
+    "deploy:preview": "wrangler pages deploy dist --project-name=full-stack-fastapi-template --compatibility-date=2024-01-01",
+    "deploy:production": "wrangler pages deploy dist --project-name=full-stack-fastapi-template --compatibility-date=2024-01-01 --env=production"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.8.0",
