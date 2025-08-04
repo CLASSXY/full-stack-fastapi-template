@@ -1,9 +1,7 @@
  import {
-  Badge,
   Box,
   Container,
   Flex,
-  Heading,
   HStack,
   Image,
   Input,
