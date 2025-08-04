@@ -50,18 +50,36 @@ class OCREngine:
         """Initialize PaddleOCR engine"""
         try:
             logger.info("🚀 Initializing PaddleOCR engine...")
+            
+            # 应用PaddlePaddle兼容性修复
+            try:
+                import paddle
+                if hasattr(paddle, 'base') and hasattr(paddle.base, 'libpaddle'):
+                    if hasattr(paddle.base.libpaddle, 'AnalysisConfig'):
+                        if not hasattr(paddle.base.libpaddle.AnalysisConfig, 'set_optimization_level'):
+                            paddle.base.libpaddle.AnalysisConfig.set_optimization_level = lambda self, level: None
+                            logger.info("✅ Applied PaddlePaddle compatibility fix for set_optimization_level")
+                
+                # 修复其他可能的兼容性问题
+                if hasattr(paddle, 'fluid') and not hasattr(paddle.fluid, 'layers'):
+                    import paddle.nn as layers
+                    paddle.fluid.layers = layers
+                    logger.info("✅ Applied PaddlePaddle compatibility fix for fluid.layers")
+                    
+            except Exception as fix_error:
+                logger.warning(f"⚠️ PaddlePaddle compatibility fix failed: {fix_error}")
+            
             from paddleocr import PaddleOCR
             
             # Check if PaddleOCR is properly installed
             logger.info(f"📋 OCR Configuration: lang={self.lang}, use_textline_orientation={self.use_textline_orientation}, use_gpu={self.use_gpu}")
             
             # 初始化PaddleOCR引擎
+            # 初始化PaddleOCR引擎 (适配PaddleOCR 3.1.0+ API)
             self.ocr = PaddleOCR(
-                use_doc_orientation_classify=False,  # 不使用文档方向分类模型
-                use_doc_unwarping=False,  # 不使用文本图像矫正模型
                 use_textline_orientation=self.use_textline_orientation,  # 文本行方向分类
                 lang=self.lang,  # 语言
-                device="gpu" if self.use_gpu and self._has_gpu() else "cpu"  # 设备
+                use_gpu=self.use_gpu and self._has_gpu()  # GPU设备
             )
             
             # 初始化结果路径
@@ -149,134 +167,62 @@ class OCREngine:
             
             logger.info(f"📊 Raw OCR result type: {type(result)}, length: {len(result) if result else 0}")
             logger.debug(f"📋 Raw OCR result: {result}")
-            
-            # 保存结果到临时目录
+
+            # 创建临时目录用于保存结果图片
             temp_dir = tempfile.mkdtemp(prefix="ocr_result_")
-            result_image_path = ""
-            result_json_path = ""
-            
-            # 使用新版PaddleOCR API保存结果
-            try:
-                if result:
-                    for res in result:
-                        # 保存可视化结果图片
-                        img_path = os.path.join(temp_dir, "result_image.jpg")
-                        res.save_to_img(img_path)
-                        result_image_path = img_path
-                        
-                        # 保存JSON结果
-                        json_path = os.path.join(temp_dir, "result.json")
-                        res.save_to_json(json_path)
-                        result_json_path = json_path
-                        
-                        logger.info(f"✅ 已保存OCR结果图片到: {img_path}")
-                        logger.info(f"✅ 已保存OCR结果JSON到: {json_path}")
-                        break  # 只处理第一个结果
-            except Exception as e:
-                logger.warning(f"⚠️ 无法使用新版API保存结果: {e}")
-                logger.info("🔄 回退到传统处理方式")
-                result_image_path = ""
-                result_json_path = ""
-            
-            # 转换PaddleOCR结果格式为标准格式
+            self.temp_dir = temp_dir
+            self.result_image_path = ""
+            self.result_json_path = "" # 不再使用JSON文件
+
             formatted_results = []
-            ocr_json_data = {}
             
-            if result and len(result) > 0:
-                # 尝试从JSON文件读取结果
-                if result_json_path and os.path.exists(result_json_path):
-                    try:
-                        with open(result_json_path, 'r', encoding='utf-8') as f:
-                            ocr_json_data = json.load(f)
-                            logger.info(f"📋 从JSON文件加载OCR结果")
-                    except Exception as e:
-                        logger.warning(f"⚠️ 无法从JSON文件加载结果: {e}")
-                
-                # 如果JSON加载失败或为空，使用传统方式处理结果
-                if not ocr_json_data:
-                    ocr_result = result[0]
+            # 统一处理新旧版本的PaddleOCR结果
+            if result:
+                # PaddleOCR 3.0+ 返回一个包含 Result 对象的列表
+                # 旧版本返回一个包含列表的列表
+                if isinstance(result, list) and len(result) > 0:
+                    # 检查是否是新版Result对象
+                    if hasattr(result[0], 'get_text_lines'):
+                        logger.info("📋 Processing new PaddleOCR result format (Result object)")
+                        try:
+                            # 保存可视化结果图片
+                            img_path = os.path.join(temp_dir, "result_image.jpg")
+                            result[0].save_to_img(img_path)
+                            self.result_image_path = img_path
+                            logger.info(f"✅ Saved OCR result image to: {img_path}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Could not save result image using new API: {e}")
+
+                        text_lines = result[0].get_text_lines()
+                        for line in text_lines:
+                            formatted_results.append({
+                                "text": line.text,
+                                "confidence": line.score,
+                                "box": line.box.tolist()
+                            })
+                            logger.info(f"✅ Extracted text: '{line.text}' (Confidence: {line.score:.3f})")
                     
-                    # 处理新版PaddleOCR格式 (v3.1.0+)
-                    if isinstance(ocr_result, dict) and 'rec_texts' in ocr_result:
-                        logger.info("📋 使用新版PaddleOCR格式 (v3.1.0+)")
-                        
-                        rec_texts = ocr_result.get('rec_texts', [])
-                        rec_scores = ocr_result.get('rec_scores', [])
-                        rec_polys = ocr_result.get('rec_polys', [])
-                        
-                        logger.info(f"📝 处理 {len(rec_texts)} 个检测到的文本区域")
-                        
-                        for i, text in enumerate(rec_texts):
-                            if text and text.strip():  # 只处理非空文本
-                                confidence = float(rec_scores[i]) if i < len(rec_scores) else 0.5
-                                box = rec_polys[i].tolist() if i < len(rec_polys) else []
-                                
-                                formatted_results.append({
-                                    "text": text.strip(),
-                                    "confidence": confidence,
-                                    "box": box
-                                })
-                                
-                                logger.info(f"✅ 提取文本: '{text.strip()}' (置信度: {confidence:.3f})")
-                    
-                    # 处理旧版PaddleOCR格式
-                    elif isinstance(ocr_result, list):
-                        logger.info("📋 使用旧版PaddleOCR格式")
-                        logger.info(f"📝 处理 {len(ocr_result)} 个检测到的文本区域")
-                        
-                        for i, line in enumerate(ocr_result):
+                    # 处理旧版格式或类似结构的返回
+                    elif isinstance(result[0], list):
+                        logger.info("📋 Processing old PaddleOCR result format (list of lists)")
+                        # result[0] 包含所有文本行
+                        for line in result[0]:
                             if line and len(line) >= 2:
-                                box = line[0]  # 边界框坐标
-                                text_info = line[1]  # (文本, 置信度)
-                                
-                                logger.debug(f"📍 区域 {i+1}: box={box}, text_info={text_info}")
-                                
-                                # 确保text_info是至少有2个元素的元组/列表
+                                box = line[0]
+                                text_info = line[1]
                                 if isinstance(text_info, (list, tuple)) and len(text_info) >= 2:
-                                    text = text_info[0] if text_info[0] else ""
-                                    confidence = float(text_info[1]) if text_info[1] is not None else 0.0
-                                    
+                                    text, confidence = text_info
                                     formatted_results.append({
                                         "text": text,
-                                        "confidence": confidence,
+                                        "confidence": float(confidence),
                                         "box": box
                                     })
-                                    
-                                    logger.info(f"✅ 提取文本: '{text}' (置信度: {confidence:.3f})")
-                                    
-                                elif isinstance(text_info, str):
-                                    # 如果text_info只是一个字符串，设置默认置信度
-                                    formatted_results.append({
-                                        "text": text_info,
-                                        "confidence": 0.5,
-                                        "box": box
-                                    })
-                                    
-                                    logger.info(f"✅ 提取文本: '{text_info}' (默认置信度: 0.5)")
-                    else:
-                        logger.warning(f"⚠️ 未知的OCR结果格式: {type(ocr_result)}")
-                else:
-                    # 从JSON数据构建格式化结果
-                    try:
-                        if isinstance(ocr_json_data, dict) and 'results' in ocr_json_data:
-                            for item in ocr_json_data['results']:
-                                if 'text' in item:
-                                    formatted_results.append({
-                                        "text": item.get('text', ''),
-                                        "confidence": item.get('confidence', 0.5),
-                                        "box": item.get('box', [])
-                                    })
-                    except Exception as e:
-                        logger.warning(f"⚠️ 处理JSON数据时出错: {e}")
-            else:
-                logger.warning("⚠️ 图像中未检测到文本")
-            
-            # 存储结果图片和JSON数据路径
-            self.result_image_path = result_image_path
-            self.result_json_path = result_json_path
-            self.temp_dir = temp_dir
-            
-            logger.info(f"🎯 OCR完成: 提取了 {len(formatted_results)} 个文本区域")
+                                    logger.info(f"✅ Extracted text: '{text}' (Confidence: {confidence:.3f})")
+
+            if not formatted_results:
+                 logger.warning("⚠️ No text detected in the image or result format not recognized.")
+
+            logger.info(f"🎯 OCR finished: Extracted {len(formatted_results)} text regions")
             return formatted_results
             
         except Exception as e:

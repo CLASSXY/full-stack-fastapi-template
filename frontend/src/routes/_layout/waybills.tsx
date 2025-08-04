@@ -1122,44 +1122,59 @@ function UploadModal({ onUploadSuccess }: { onUploadSuccess: () => void }) {
 
   // 面单上传处理mutation
   const waybillUploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      // 创建FormData对象
-      const formData = new FormData()
-      formData.append('image_file', file)
-      // 不需要提供device_sn字段
-      
-      // 直接调用后端API，使用正确的基础URL
-      const baseUrl = OpenAPI.BASE || 'http://localhost:8000'
-      const response = await fetch(`${baseUrl}/api/v1/ocr/upload-waybill`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
+    mutationFn: async ({ file, onProgress }: { file: File; onProgress: (percent: number) => void }) => {
+      return new Promise((resolve, reject) => {
+        const formData = new FormData()
+        formData.append("image_file", file)
+
+        const xhr = new XMLHttpRequest()
+        const baseUrl = OpenAPI.BASE || "http://localhost:8000"
+        xhr.open("POST", `${baseUrl}/api/v1/ocr/upload-waybill`)
+
+        const accessToken = localStorage.getItem("access_token")
+        if (accessToken) {
+          xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`)
+        }
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = (event.loaded / event.total) * 100
+            onProgress(percentComplete)
+          }
+        }
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText))
+          } else {
+            try {
+              const errorData = JSON.parse(xhr.responseText)
+              reject(new Error(errorData.detail || "上传失败"))
+            } catch (e) {
+              reject(new Error(`上传失败: ${xhr.statusText}`))
+            }
+          }
+        }
+
+        xhr.onerror = () => {
+          reject(new Error("网络错误，上传失败"))
+        }
+
+        xhr.send(formData)
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || '上传失败')
-      }
-      
-      return await response.json()
     },
     onSuccess: () => {
-      showToast.showSuccessToast('面单上传并识别成功！')
-      setUploadFiles([])
-      setIsOpen(false)
-      onUploadSuccess()
-      queryClient.invalidateQueries({ queryKey: ["waybills"] })
+      // Success toast is shown after all files are uploaded
     },
-    onError: (error: Error) => {
-      console.error('面单上传失败:', error)
-      showToast.showErrorToast('面单上传失败: ' + (error.message || '未知错误'))
+    onError: (error: Error, variables) => {
+      // The file object is in variables.file
+      const fileName = (variables as any)?.file?.name || '当前文件'
+      console.error(`面单 ${fileName} 上传失败:`, error)
+      showToast.showErrorToast(`面单 ${fileName} 上传失败: ${error.message || '未知错误'}`)
     },
     onSettled: () => {
-      setIsUploading(false)
-      setUploadProgress(0)
-    }
+      // Handled in the handleUpload loop
+    },
   })
 
   // 验证文件格式和大小
@@ -1220,32 +1235,42 @@ function UploadModal({ onUploadSuccess }: { onUploadSuccess: () => void }) {
   // 上传文件
   const handleUpload = async () => {
     if (uploadFiles.length === 0) return
-    
+
     setIsUploading(true)
-    setUploadProgress(0)
     setUploadedCount(0)
-    
-    try {
-      // 处理所有文件
-      for (let i = 0; i < uploadFiles.length; i++) {
-        const file = uploadFiles[i]
-        try {
-          await waybillUploadMutation.mutateAsync(file)
-          setUploadedCount(prev => prev + 1)
-          setUploadProgress(((i + 1) / uploadFiles.length) * 100)
-        } catch (error) {
-          showToast.showErrorToast(`文件 ${file.name} 上传失败`)
-        }
+    const totalFiles = uploadFiles.length
+    let successfulUploads = 0
+
+    for (let i = 0; i < totalFiles; i++) {
+      const file = uploadFiles[i]
+      try {
+        await waybillUploadMutation.mutateAsync({
+          file,
+          onProgress: (percent) => {
+            // Calculate overall progress
+            const overallProgress = ((i + percent / 100) / totalFiles) * 100;
+            setUploadProgress(overallProgress);
+          },
+        })
+        successfulUploads++
+        setUploadedCount((prev) => prev + 1)
+      } catch (error) {
+        // Error is handled by mutation's onError, no need to do anything here
       }
-      
-      // 全部完成后
-      setUploadProgress(100)
-      showToast.showSuccessToast('文件上传完成')
-      onUploadSuccess()
-      handleClose()
-    } catch (error) {
-      setUploadProgress(0)
-      showToast.showErrorToast('上传过程中发生错误')
+    }
+
+    setIsUploading(false)
+    if (successfulUploads > 0) {
+        showToast.showSuccessToast(`${successfulUploads}个文件上传成功！`)
+        onUploadSuccess()
+    }
+    
+    if (successfulUploads === totalFiles) {
+        handleClose()
+    } else {
+        // For simplicity, we clear all files. A more advanced implementation
+        // could remove only the successfully uploaded ones.
+        setUploadFiles([])
     }
   }
 
