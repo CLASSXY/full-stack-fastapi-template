@@ -1,4 +1,4 @@
-FROM python:3.10
+FROM python:3.12
 
 ENV PYTHONUNBUFFERED=1
 
@@ -36,29 +36,58 @@ COPY ./alembic.ini /app/
 COPY ./app /app/app
 COPY ./pyproject.toml ./uv.lock /app/
 
-# 修改pyproject.toml以使用兼容的版本组合
-RUN sed -i 's/"paddlepaddle-gpu>=2.5.0; sys_platform != '\''darwin'\''",/"paddlepaddle==2.6.2",/g' /app/pyproject.toml && \
-    sed -i 's/"paddlepaddle>=2.5.0; sys_platform == '\''darwin'\''",//g' /app/pyproject.toml && \
-    sed -i 's/"paddleocr>=2.7.0",/"paddleocr==2.8.1",/g' /app/pyproject.toml && \
-    sed -i 's/"opencv-python>=4.8.0",/"opencv-python==4.7.1.72",/g' /app/pyproject.toml
-
-# 分步安装依赖以避免版本冲突
-# 首先安装核心依赖
+# 安装基础依赖以避免版本冲突
 RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ \
-    numpy==1.24.3 \
-    opencv-python==4.7.1.72 \
-    Pillow==10.0.1
+    numpy==2.3.2 \
+    opencv-python==4.11.0.86 \
+    Pillow==11.3.0 \
+    setuptools==80.9.0
 
-# 然后安装PaddlePaddle
+# 安装PaddlePaddle和OCR依赖
 RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ \
-    paddlepaddle==2.6.2
+    paddlepaddle-gpu==2.6.2 \
+    paddleocr==3.1.0
 
-# 最后安装PaddleOCR
+# 修改pyproject.toml以使用与本地环境一致的版本组合
+RUN sed -i 's/"paddlepaddle-gpu>=2.5.0; sys_platform != '\''darwin'\''",/"paddlepaddle-gpu==2.6.2",/g' /app/pyproject.toml && \
+    sed -i 's/"paddlepaddle>=2.5.0; sys_platform == '\''darwin'\''",/"paddlepaddle==3.1.0",/g' /app/pyproject.toml && \
+    sed -i 's/"paddleocr>=2.7.0",/"paddleocr==3.1.0",/g' /app/pyproject.toml && \
+    sed -i 's/"opencv-python>=4.8.0",/"opencv-python==4.11.0.86",/g' /app/pyproject.toml && \
+    sed -i 's/"numpy>=1.21.0",/"numpy==2.3.2",/g' /app/pyproject.toml && \
+    sed -i 's/"Pillow>=10.0.0",/"Pillow==11.3.0",/g' /app/pyproject.toml && \
+    sed -i 's/"setuptools>=68.0.0",/"setuptools==80.9.0",/g' /app/pyproject.toml && \
+    sed -i 's/"sentry-sdk\[fastapi\]>=2.20.0",/"sentry-sdk[fastapi]>=2.20.0",/g' /app/pyproject.toml
+
+# 先安装兼容的 sentry-sdk 版本
 RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ \
-    paddleocr==2.8.1
+    "sentry-sdk[fastapi]>=2.20.0"
 
-# 安装项目依赖
-RUN pip install --no-cache-dir -e . -i https://mirrors.aliyun.com/pypi/simple/
+# 安装项目依赖，排除 sentry-sdk 以避免冲突
+RUN pip install --no-cache-dir -e . -i https://mirrors.aliyun.com/pypi/simple/ \
+    --no-deps
+
+# 安装其他必需的依赖
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ \
+    "fastapi[standard]<1.0.0,>=0.114.2" \
+    "python-multipart<1.0.0,>=0.0.7" \
+    "email-validator<3.0.0.0,>=2.1.0.post1" \
+    "passlib[bcrypt]<2.0.0,>=1.7.4" \
+    "tenacity<9.0.0,>=8.2.3" \
+    "pydantic>2.0" \
+    "emails<1.0,>=0.6" \
+    "jinja2<4.0.0,>=3.1.4" \
+    "alembic<2.0.0,>=1.12.1" \
+    "httpx<1.0.0,>=0.25.1" \
+    "psycopg[binary]<4.0.0,>=3.1.13" \
+    "sqlmodel<1.0.0,>=0.0.21" \
+    "bcrypt==3.2.2" \
+    "pydantic-settings<3.0.0,>=2.2.1" \
+    "pyjwt<3.0.0,>=2.8.0" \
+    "aiofiles>=23.0.0" \
+    "boto3>=1.26.0" \
+    "botocore>=1.29.0" \
+    "langchain-ollama>=0.1.0" \
+    "langchain-core>=0.1.0"
 
 ENV PYTHONPATH=/app
 
