@@ -116,13 +116,170 @@ class OCREngine:
         except:
             return False
     
+    def _preprocess_image(self, image_path: str) -> str:
+        """预处理图片以提高OCR识别率"""
+        try:
+            logger.info(f"🎨 开始预处理图片: {image_path}")
+            
+            # 读取图片
+            image = cv2.imread(image_path)
+            if image is None:
+                logger.warning("⚠️ 无法读取图片，使用原始图片")
+                return image_path
+            
+            original_height, original_width = image.shape[:2]
+            logger.info(f"📐 原始图片尺寸: {original_width}x{original_height}")
+            
+            # 1. 转换为灰度图
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # 2. 图片尺寸优化 - 确保图片不会太小
+            min_size = 800  # 最小边长
+            if min(original_width, original_height) < min_size:
+                scale = min_size / min(original_width, original_height)
+                new_width = int(original_width * scale)
+                new_height = int(original_height * scale)
+                gray = cv2.resize(gray, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+                logger.info(f"📈 图片放大到: {new_width}x{new_height} (scale: {scale:.2f})")
+            
+            # 3. 降噪处理
+            denoised = cv2.fastNlMeansDenoising(gray)
+            
+            # 4. 对比度增强 - 使用CLAHE (Contrast Limited Adaptive Histogram Equalization)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            enhanced = clahe.apply(denoised)
+            
+            # 5. 锐化处理
+            kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+            sharpened = cv2.filter2D(enhanced, -1, kernel)
+            
+            # 6. 二值化处理 - 使用自适应阈值
+            binary = cv2.adaptiveThreshold(
+                sharpened, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                cv2.THRESH_BINARY, 11, 2
+            )
+            
+            # 7. 形态学操作 - 去除小噪点
+            kernel = np.ones((2,2), np.uint8)
+            cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+            
+            # 保存预处理后的图片
+            temp_dir = tempfile.mkdtemp(prefix="ocr_preprocess_")
+            preprocessed_path = os.path.join(temp_dir, "preprocessed.jpg")
+            cv2.imwrite(preprocessed_path, cleaned)
+            
+            logger.info(f"✅ 图片预处理完成，保存到: {preprocessed_path}")
+            return preprocessed_path
+            
+        except Exception as e:
+            logger.warning(f"⚠️ 图片预处理失败: {e}，使用原始图片")
+            return image_path
+    
     def _initialize_mock_ocr(self):
         """Initialize mock OCR for fallback"""
         self.ocr = None
         logger.info("Using Mock OCR Engine")
     
+    def diagnose_image(self, image_path: str) -> Dict[str, Any]:
+        """诊断图片质量和OCR识别条件"""
+        try:
+            logger.info(f"🔍 开始诊断图片: {image_path}")
+            
+            # 读取图片
+            image = cv2.imread(image_path)
+            if image is None:
+                return {"error": "无法读取图片文件"}
+            
+            # 基本信息
+            height, width = image.shape[:2]
+            file_size = os.path.getsize(image_path)
+            
+            # 转换为灰度图进行分析
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # 计算图片质量指标
+            # 1. 对比度分析
+            contrast = gray.std()
+            
+            # 2. 亮度分析
+            brightness = gray.mean()
+            
+            # 3. 清晰度分析 (拉普拉斯方差)
+            laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+            
+            # 4. 边缘检测 - 估算文字区域
+            edges = cv2.Canny(gray, 50, 150)
+            edge_density = np.sum(edges > 0) / (width * height)
+            
+            # 5. 二值化预览
+            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            white_ratio = np.sum(binary == 255) / (width * height)
+            
+            # 质量评估
+            quality_issues = []
+            recommendations = []
+            
+            if width < 800 or height < 600:
+                quality_issues.append("图片分辨率较低")
+                recommendations.append("建议使用更高分辨率的图片")
+            
+            if contrast < 30:
+                quality_issues.append("对比度不足")
+                recommendations.append("增强图片对比度")
+            
+            if brightness < 50 or brightness > 200:
+                quality_issues.append("亮度不合适")
+                recommendations.append("调整图片亮度到合适范围")
+            
+            if laplacian_var < 100:
+                quality_issues.append("图片可能模糊")
+                recommendations.append("使用更清晰的图片")
+            
+            if edge_density < 0.01:
+                quality_issues.append("可能缺少文字内容")
+                recommendations.append("确认图片包含清晰的文字")
+            
+            # 综合评分
+            score = 0
+            if width >= 800 and height >= 600: score += 20
+            if contrast >= 30: score += 20
+            if 50 <= brightness <= 200: score += 20
+            if laplacian_var >= 100: score += 20
+            if edge_density >= 0.01: score += 20
+            
+            quality_level = "优秀" if score >= 80 else "良好" if score >= 60 else "一般" if score >= 40 else "较差"
+            
+            diagnosis = {
+                "basic_info": {
+                    "width": width,
+                    "height": height,
+                    "file_size": file_size,
+                    "format": os.path.splitext(image_path)[1]
+                },
+                "quality_metrics": {
+                    "contrast": round(contrast, 2),
+                    "brightness": round(brightness, 2),
+                    "sharpness": round(laplacian_var, 2),
+                    "edge_density": round(edge_density, 4),
+                    "white_ratio": round(white_ratio, 3)
+                },
+                "assessment": {
+                    "score": score,
+                    "level": quality_level,
+                    "issues": quality_issues,
+                    "recommendations": recommendations
+                }
+            }
+            
+            logger.info(f"📊 图片诊断完成: {quality_level} (评分: {score}/100)")
+            return diagnosis
+            
+        except Exception as e:
+            logger.error(f"❌ 图片诊断失败: {e}")
+            return {"error": str(e)}
+    
     def predict(self, image_path: str) -> List[Dict[str, Any]]:
-        """OCR prediction with 30 second timeout"""
+        """OCR prediction with 30 second timeout and enhanced preprocessing"""
         try:
             logger.info(f"🔍 Starting OCR prediction for image: {image_path}")
             
@@ -136,6 +293,9 @@ class OCREngine:
             
             logger.info(f"📁 Image file exists: {image_path} (size: {os.path.getsize(image_path)} bytes)")
             
+            # 预处理图片以提高OCR识别率
+            preprocessed_path = self._preprocess_image(image_path)
+            
             # Use real PaddleOCR with timeout
             logger.info("🤖 Running PaddleOCR prediction with 30s timeout...")
             
@@ -148,7 +308,8 @@ class OCREngine:
             def ocr_worker():
                 nonlocal result, exception
                 try:
-                    result = self.ocr.predict(image_path)
+                    # 使用预处理后的图片进行OCR识别
+                    result = self.ocr.ocr(preprocessed_path, cls=self.use_textline_orientation)
                 except Exception as e:
                     exception = e
             
@@ -173,6 +334,13 @@ class OCREngine:
             
             logger.info(f"📊 Raw OCR result type: {type(result)}, length: {len(result) if result else 0}")
             logger.debug(f"📋 Raw OCR result: {result}")
+            
+            # 清理预处理的临时文件
+            if preprocessed_path != image_path:
+                try:
+                    os.unlink(preprocessed_path)
+                except:
+                    pass
 
             # 创建临时目录用于保存结果图片
             temp_dir = tempfile.mkdtemp(prefix="ocr_result_")
@@ -184,49 +352,72 @@ class OCREngine:
             
             # 统一处理新旧版本的PaddleOCR结果
             if result:
-                # PaddleOCR 3.0+ 返回一个包含 Result 对象的列表
-                # 旧版本返回一个包含列表的列表
+                logger.info(f"🔍 分析OCR结果结构: {type(result)}")
+                
+                # PaddleOCR标准格式: [[[box], [text, confidence]], ...]
                 if isinstance(result, list) and len(result) > 0:
-                    # 检查是否是新版Result对象
-                    if hasattr(result[0], 'get_text_lines'):
-                        logger.info("📋 Processing new PaddleOCR result format (Result object)")
+                    # 检查是否是标准的OCR结果格式
+                    if isinstance(result[0], list):
+                        logger.info("📋 处理标准PaddleOCR结果格式")
+                        
+                        for line_result in result[0] if result[0] else []:
+                            if line_result and len(line_result) >= 2:
+                                try:
+                                    box = line_result[0]  # 边界框坐标
+                                    text_info = line_result[1]  # [文本, 置信度]
+                                    
+                                    if isinstance(text_info, (list, tuple)) and len(text_info) >= 2:
+                                        text, confidence = text_info[0], text_info[1]
+                                        
+                                        # 过滤空文本和低置信度结果
+                                        if text and text.strip() and confidence > 0.1:
+                                            formatted_results.append({
+                                                "text": text.strip(),
+                                                "confidence": float(confidence),
+                                                "box": box
+                                            })
+                                            logger.info(f"✅ 提取文本: '{text.strip()}' (置信度: {confidence:.3f})")
+                                        else:
+                                            logger.debug(f"⏭️ 跳过低质量文本: '{text}' (置信度: {confidence:.3f})")
+                                            
+                                except Exception as parse_error:
+                                    logger.warning(f"⚠️ 解析单行结果失败: {parse_error}")
+                                    continue
+                    
+                    # 检查是否是新版Result对象格式
+                    elif hasattr(result[0], 'get_text_lines'):
+                        logger.info("📋 处理新版PaddleOCR Result对象格式")
                         try:
                             # 保存可视化结果图片
                             img_path = os.path.join(temp_dir, "result_image.jpg")
                             result[0].save_to_img(img_path)
                             self.result_image_path = img_path
-                            logger.info(f"✅ Saved OCR result image to: {img_path}")
+                            logger.info(f"✅ 保存OCR结果图片到: {img_path}")
                         except Exception as e:
-                            logger.warning(f"⚠️ Could not save result image using new API: {e}")
+                            logger.warning(f"⚠️ 无法使用新API保存结果图片: {e}")
 
                         text_lines = result[0].get_text_lines()
                         for line in text_lines:
-                            formatted_results.append({
-                                "text": line.text,
-                                "confidence": line.score,
-                                "box": line.box.tolist()
-                            })
-                            logger.info(f"✅ Extracted text: '{line.text}' (Confidence: {line.score:.3f})")
+                            if line.text and line.text.strip() and line.score > 0.1:
+                                formatted_results.append({
+                                    "text": line.text.strip(),
+                                    "confidence": line.score,
+                                    "box": line.box.tolist()
+                                })
+                                logger.info(f"✅ 提取文本: '{line.text.strip()}' (置信度: {line.score:.3f})")
                     
-                    # 处理旧版格式或类似结构的返回
-                    elif isinstance(result[0], list):
-                        logger.info("📋 Processing old PaddleOCR result format (list of lists)")
-                        # result[0] 包含所有文本行
-                        for line in result[0]:
-                            if line and len(line) >= 2:
-                                box = line[0]
-                                text_info = line[1]
-                                if isinstance(text_info, (list, tuple)) and len(text_info) >= 2:
-                                    text, confidence = text_info
-                                    formatted_results.append({
-                                        "text": text,
-                                        "confidence": float(confidence),
-                                        "box": box
-                                    })
-                                    logger.info(f"✅ Extracted text: '{text}' (Confidence: {confidence:.3f})")
+                    else:
+                        logger.warning(f"⚠️ 未识别的OCR结果格式: {type(result[0])}")
+                        logger.debug(f"📋 结果内容: {result}")
 
+            # 如果没有检测到文本，尝试降低阈值重新处理
             if not formatted_results:
-                 logger.warning("⚠️ No text detected in the image or result format not recognized.")
+                logger.warning("⚠️ 未检测到文本，可能的原因:")
+                logger.warning("   1. 图片中没有文字")
+                logger.warning("   2. 文字对比度太低")
+                logger.warning("   3. 文字太小或模糊")
+                logger.warning("   4. 语言模型不匹配")
+                logger.warning("   5. 图片质量问题")
 
             logger.info(f"🎯 OCR finished: Extracted {len(formatted_results)} text regions")
             return formatted_results
@@ -380,7 +571,7 @@ class OCRService:
         image_path: str, 
         language: str = "ch",
         use_angle_cls: bool = False,
-        confidence_thresh: float = 0.5,
+        confidence_thresh: float = 0.3,  # 降低默认阈值
         ocr_record_id: str = None
     ) -> Dict[str, Any]:
         """Process OCR on image file with timeout handling"""
@@ -631,6 +822,172 @@ class OCRService:
                 
         except Exception as e:
             logger.error(f"❌ Failed to update OCR record status: {e}")
+
+    async def enhanced_ocr_process(
+        self, 
+        image_path: str, 
+        language: str = "ch",
+        use_angle_cls: bool = False,
+        confidence_thresh: float = 0.3
+    ) -> Dict[str, Any]:
+        """增强的OCR处理，使用多种策略提高识别率"""
+        try:
+            logger.info(f"🚀 开始增强OCR处理: {image_path}")
+            
+            # 1. 先诊断图片质量
+            diagnosis = self.ocr_engine.diagnose_image(image_path)
+            logger.info(f"📊 图片质量评估: {diagnosis.get('assessment', {}).get('level', '未知')}")
+            
+            # 2. 尝试多种预处理策略
+            strategies = [
+                ("原始图片", image_path),
+                ("标准预处理", None),  # 将在下面生成
+                ("高对比度处理", None),
+                ("二值化处理", None)
+            ]
+            
+            best_result = {"success": False, "detection_boxes": [], "ocr_text": ""}
+            best_count = 0
+            
+            for strategy_name, strategy_path in strategies:
+                try:
+                    logger.info(f"🔄 尝试策略: {strategy_name}")
+                    
+                    # 生成对应的预处理图片
+                    if strategy_path is None:
+                        if strategy_name == "标准预处理":
+                            strategy_path = self._preprocess_image_standard(image_path)
+                        elif strategy_name == "高对比度处理":
+                            strategy_path = self._preprocess_image_high_contrast(image_path)
+                        elif strategy_name == "二值化处理":
+                            strategy_path = self._preprocess_image_binary(image_path)
+                    
+                    # 执行OCR
+                    result = await self._single_ocr_attempt(
+                        strategy_path, language, use_angle_cls, confidence_thresh
+                    )
+                    
+                    if result["success"]:
+                        text_count = len(result["detection_boxes"])
+                        logger.info(f"✅ {strategy_name} 识别到 {text_count} 个文本区域")
+                        
+                        # 选择识别效果最好的结果
+                        if text_count > best_count:
+                            best_result = result
+                            best_count = text_count
+                            logger.info(f"🏆 更新最佳结果: {strategy_name} ({text_count} 个文本)")
+                    
+                    # 清理临时文件
+                    if strategy_path != image_path:
+                        try:
+                            os.unlink(strategy_path)
+                        except:
+                            pass
+                            
+                except Exception as strategy_error:
+                    logger.warning(f"⚠️ 策略 {strategy_name} 失败: {strategy_error}")
+                    continue
+            
+            # 3. 如果所有策略都失败，提供详细的诊断信息
+            if best_count == 0:
+                logger.warning("❌ 所有OCR策略都未能识别到文本")
+                
+                # 提供诊断建议
+                issues = diagnosis.get('assessment', {}).get('issues', [])
+                recommendations = diagnosis.get('assessment', {}).get('recommendations', [])
+                
+                error_msg = "OCR识别失败，可能原因:\n"
+                for issue in issues:
+                    error_msg += f"• {issue}\n"
+                
+                if recommendations:
+                    error_msg += "\n建议:\n"
+                    for rec in recommendations:
+                        error_msg += f"• {rec}\n"
+                
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "diagnosis": diagnosis,
+                    "total_boxes": 0
+                }
+            
+            logger.info(f"🎉 增强OCR处理完成，最终识别到 {best_count} 个文本区域")
+            return best_result
+            
+        except Exception as e:
+            logger.error(f"❌ 增强OCR处理失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "total_boxes": 0
+            }
+    
+    def _preprocess_image_standard(self, image_path: str) -> str:
+        """标准预处理"""
+        return self.ocr_engine._preprocess_image(image_path)
+    
+    def _preprocess_image_high_contrast(self, image_path: str) -> str:
+        """高对比度预处理"""
+        try:
+            image = cv2.imread(image_path)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # 强化对比度
+            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+            enhanced = clahe.apply(gray)
+            
+            # 伽马校正
+            gamma = 1.2
+            enhanced = np.power(enhanced / 255.0, gamma) * 255.0
+            enhanced = enhanced.astype(np.uint8)
+            
+            temp_path = tempfile.mktemp(suffix='.jpg')
+            cv2.imwrite(temp_path, enhanced)
+            return temp_path
+            
+        except Exception as e:
+            logger.warning(f"高对比度预处理失败: {e}")
+            return image_path
+    
+    def _preprocess_image_binary(self, image_path: str) -> str:
+        """二值化预处理"""
+        try:
+            image = cv2.imread(image_path)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # 使用Otsu阈值进行二值化
+            _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            
+            temp_path = tempfile.mktemp(suffix='.jpg')
+            cv2.imwrite(temp_path, binary)
+            return temp_path
+            
+        except Exception as e:
+            logger.warning(f"二值化预处理失败: {e}")
+            return image_path
+    
+    async def _single_ocr_attempt(
+        self, 
+        image_path: str, 
+        language: str, 
+        use_angle_cls: bool, 
+        confidence_thresh: float
+    ) -> Dict[str, Any]:
+        """单次OCR尝试"""
+        try:
+            # 使用现有的process_ocr方法
+            result = await self.process_ocr(
+                image_path=image_path,
+                language=language,
+                use_angle_cls=use_angle_cls,
+                confidence_thresh=confidence_thresh
+            )
+            return result
+            
+        except Exception as e:
+            logger.error(f"单次OCR尝试失败: {e}")
+            return {"success": False, "error": str(e), "detection_boxes": []}
 
     async def cleanup_temp_files(self, *file_paths: str):
         """Clean up temporary files"""
