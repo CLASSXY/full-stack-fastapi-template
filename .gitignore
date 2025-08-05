@@ -8,3 +8,5 @@ node_modules/
 .cursor
 .DS_Store
 backend/logs/
+.claude
+.github
